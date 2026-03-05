@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+dist/
+*.tgz
+npm-debug.log*
+.DS_Store
+.event-plugin-queue.json
+.event-plugin-hmac.secret
+.event-server/

@@ -1,0 +1,352 @@
+/**
+ * OpenClaw Event Server Plugin
+ *
+ * Broadcasts raw internal/plugin hook events with a canonical envelope and
+ * emits synthetic agent status/activity events for downstream consumers.
+ */
+
+import {
+  CONFIG_SCHEMA,
+  DEFAULT_CONFIG,
+  PluginConfig,
+  loadEnvConfig,
+  mergeConfig,
+  resolveRuntimeConfig,
+  validateConfig,
+} from './config';
+import { stopBroadcastServer, startBroadcastServer } from './broadcast/websocketServer';
+import { AgentStatusReducer } from './hooks/status-reducer';
+import { SubagentTracker } from './hooks/subagent-tracker';
+import { SessionTracker } from './hooks/session-hooks';
+import { ToolCallTracker } from './hooks/tool-hooks';
+import { EventFileLogger, getRuntimeLogger } from './logging';
+import { createInternalHandlers } from './runtime/internal-handlers';
+import { createHookBridge } from './runtime/hook-bridge';
+import { createRuntimeEventOps } from './runtime/runtime-events';
+import { registerTypedHooks } from './runtime/typed-hooks';
+import {
+  OpenClawPluginApi,
+  PendingToolCall,
+  PluginState,
+  RuntimeLogger,
+} from './runtime/types';
+import {
+  getApiConfig,
+  getWebSocketPorts,
+  isStatusTickerDisabled,
+  isWebSocketDisabled,
+  normalizeError,
+  registerInternalHook,
+} from './runtime/utils';
+
+const PLUGIN_VERSION = '1.0.0';
+const DEFAULT_WS_PORTS = [9011, 9012, 9013, 9014, 9015, 9016];
+const TOOL_GUARD_TRACE =
+  process.env.EVENT_PLUGIN_TOOL_GUARD_TRACE === '1' ||
+  process.env.EVENT_PLUGIN_TOOL_GUARD_TRACE === 'true';
+
+const state: PluginState = {
+  config: { ...DEFAULT_CONFIG },
+  toolTracker: new ToolCallTracker(),
+  pendingToolCalls: new Map<string, PendingToolCall>(),
+  pendingToolCallsByContext: new WeakMap<object, PendingToolCall>(),
+  sessionTracker: new SessionTracker(),
+  statusReducer: new AgentStatusReducer(),
+  subagentTracker: new SubagentTracker(),
+  eventFileLogger: undefined,
+  statusTimer: undefined,
+  isInitialized: false,
+  websocketEnabled: true,
+  hookBridge: undefined,
+};
+
+function toMessage(args: unknown[]): string {
+  return args
+    .map((value) => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    })
+    .join(' ');
+}
+
+const logger: RuntimeLogger = {
+  debug: (...args: unknown[]) => {
+    if (state.config.logging.debug) {
+      getRuntimeLogger().debug('[event-plugin:debug]', ...args);
+      state.eventFileLogger?.logRuntime('debug', '[event-plugin:debug]', args);
+    }
+  },
+  info: (...args: unknown[]) => {
+    getRuntimeLogger().info('[event-plugin:info]', ...args);
+    state.eventFileLogger?.logRuntime('info', '[event-plugin:info]', args);
+  },
+  warn: (...args: unknown[]) => {
+    getRuntimeLogger().warn('[event-plugin:warn]', ...args);
+    state.eventFileLogger?.logRuntime('warn', '[event-plugin:warn]', args);
+  },
+  error: (...args: unknown[]) => {
+    if (state.config.logging.logErrors) {
+      getRuntimeLogger().error('[event-plugin:error]', ...args);
+      state.eventFileLogger?.logRuntime('error', '[event-plugin:error]', args);
+    }
+  },
+  queue: (...args: unknown[]) => {
+    if (state.config.logging.logQueue) {
+      getRuntimeLogger().debug('[event-plugin:queue]', ...args);
+      state.eventFileLogger?.logRuntime('debug', '[event-plugin:queue]', args);
+    }
+  },
+};
+
+function resetState(ops: ReturnType<typeof createRuntimeEventOps>): void {
+  ops.stopStatusTimer();
+  state.queue?.stop();
+  state.queue = undefined;
+  state.toolTracker.clear();
+  state.pendingToolCalls.clear();
+  state.pendingToolCallsByContext = new WeakMap<object, PendingToolCall>();
+  state.sessionTracker.clear();
+  state.statusReducer.clear();
+  state.subagentTracker.clear();
+  if (state.hookBridge) {
+    void state.hookBridge.stop().catch((error: unknown) => {
+      getRuntimeLogger().error('[event-plugin:error] Failed to stop hook bridge', toMessage([error]));
+    });
+    state.hookBridge = undefined;
+  }
+  if (state.eventFileLogger) {
+    void state.eventFileLogger.stop().catch((error: unknown) => {
+      getRuntimeLogger().error('[event-plugin:error] Failed to stop event file logger', toMessage([error]));
+    });
+    state.eventFileLogger = undefined;
+  }
+}
+
+function initializeConfig(api: OpenClawPluginApi): void {
+  const baseConfig = getApiConfig<PluginConfig>(api);
+  const envConfig = loadEnvConfig();
+  state.config = resolveRuntimeConfig(mergeConfig(baseConfig, envConfig));
+  state.statusReducer = new AgentStatusReducer({
+    workingWindowMs: state.config.status.workingWindowMs,
+    sleepingWindowMs: state.config.status.sleepingWindowMs,
+  });
+
+  const validation = validateConfig(state.config);
+  if (!validation.valid) {
+    logger.error('Configuration validation failed:', validation.errors);
+  }
+
+  if (TOOL_GUARD_TRACE) {
+    logger.info('[ToolGuardTrace] config.input', {
+      apiConfigKeys: Object.keys(baseConfig),
+      hasHookBridge: Boolean(baseConfig.hookBridge),
+      hasToolGuard: Boolean(baseConfig.hookBridge?.toolGuard),
+      apiEnabled: baseConfig.enabled,
+    });
+
+    const actionIds = Object.keys(state.config.hookBridge.actions ?? {});
+    const bridgeRuleIds = (state.config.hookBridge.rules ?? []).map((rule) => rule.id);
+    const guardRuleIds = (state.config.hookBridge.toolGuard.rules ?? []).map((rule) => rule.id);
+    logger.info('[ToolGuardTrace] config.loaded', {
+      hookBridgeEnabled: state.config.hookBridge.enabled,
+      toolGuardEnabled: state.config.hookBridge.toolGuard.enabled,
+      toolGuardDryRun: state.config.hookBridge.toolGuard.dryRun,
+      toolGuardOnError: state.config.hookBridge.toolGuard.onError,
+      toolGuardRules: guardRuleIds,
+      bridgeRules: bridgeRuleIds,
+      actions: actionIds,
+    });
+  }
+}
+
+function initializeEventFileLogger(): void {
+  if (!state.config.eventLog.enabled) {
+    return;
+  }
+  state.eventFileLogger = new EventFileLogger(state.config.eventLog);
+  void state.eventFileLogger.start().catch((error: unknown) => {
+    state.eventFileLogger = undefined;
+    getRuntimeLogger().error('[event-plugin:error] Failed to start event file logger', toMessage([error]));
+  });
+}
+
+function maybeStartWebSocketServer(): void {
+  if (isWebSocketDisabled()) {
+    state.websocketEnabled = false;
+    void stopBroadcastServer();
+    logger.info('WebSocket broadcast server disabled via EVENT_PLUGIN_DISABLE_WS');
+    return;
+  }
+
+  state.websocketEnabled = true;
+  try {
+    const wsPorts = getWebSocketPorts(DEFAULT_WS_PORTS);
+    startBroadcastServer({
+      port: wsPorts[0],
+      fallbackPorts: wsPorts.slice(1),
+      host: state.config.security.ws.bindAddress,
+      requireAuth: state.config.security.ws.requireAuth,
+      authToken: state.config.security.ws.authToken,
+      allowedOrigins: state.config.security.ws.allowedOrigins,
+      allowedIps: state.config.security.ws.allowedIps,
+    });
+    logger.info(
+      `WebSocket broadcast server startup requested on ws://${state.config.security.ws.bindAddress}:${wsPorts[0]} (fallbacks: ${wsPorts
+        .slice(1)
+        .join(', ') || 'none'})`,
+    );
+  } catch (error) {
+    const startupError = normalizeError(error);
+    logger.error('Failed to start WebSocket broadcast server:', startupError.message);
+  }
+}
+
+function activate(api: OpenClawPluginApi): void {
+  logger.info('Activating OpenClaw Event Server Plugin v' + PLUGIN_VERSION);
+
+  const ops = createRuntimeEventOps(state, logger);
+  resetState(ops);
+  initializeConfig(api);
+  initializeEventFileLogger();
+  state.hookBridge = createHookBridge(state.config, logger);
+
+  if (!state.config.enabled) {
+    state.websocketEnabled = false;
+    void stopBroadcastServer();
+    state.isInitialized = true;
+    logger.info('Plugin is disabled via configuration');
+    return;
+  }
+
+  maybeStartWebSocketServer();
+  // Initialize the queue immediately so webhook reliability does not depend on
+  // a later gateway:startup hook firing in every runtime environment.
+  ops.maybeInitializeQueue();
+
+  const handlers = createInternalHandlers({ state, ops });
+
+  // Internal hook surface.
+  registerInternalHook(
+    logger,
+    api,
+    'message:received',
+    { name: 'event-plugin.message-received', description: 'Broadcast message.received events' },
+    handlers.handleMessageReceived,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'message:transcribed',
+    { name: 'event-plugin.message-transcribed', description: 'Broadcast message.transcribed events' },
+    handlers.handleMessageTranscribed,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'message:preprocessed',
+    { name: 'event-plugin.message-preprocessed', description: 'Broadcast message.preprocessed events' },
+    handlers.handleMessagePreprocessed,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'message:sent',
+    { name: 'event-plugin.message-sent', description: 'Broadcast message.sent events' },
+    handlers.handleMessageSent,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'command:new',
+    { name: 'event-plugin.command-new', description: 'Broadcast command.new events' },
+    (event) => handlers.handleCommand('new', event),
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'command:reset',
+    { name: 'event-plugin.command-reset', description: 'Broadcast command.reset events' },
+    (event) => handlers.handleCommand('reset', event),
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'command:stop',
+    { name: 'event-plugin.command-stop', description: 'Broadcast command.stop events' },
+    (event) => handlers.handleCommand('stop', event),
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'agent:bootstrap',
+    { name: 'event-plugin.agent-bootstrap', description: 'Broadcast agent.bootstrap events' },
+    handlers.handleAgentBootstrap,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'agent:error',
+    { name: 'event-plugin.agent-error', description: 'Broadcast agent.error events' },
+    handlers.handleAgentError,
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'agent:session:start',
+    { name: 'event-plugin.agent-session-start', description: 'Broadcast agent.session_start events' },
+    (event) => handlers.handleAgentSessionEvent('agent.session_start', event),
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'agent:session:end',
+    { name: 'event-plugin.agent-session-end', description: 'Broadcast agent.session_end events' },
+    (event) => handlers.handleAgentSessionEvent('agent.session_end', event),
+  );
+  registerInternalHook(
+    logger,
+    api,
+    'gateway:startup',
+    { name: 'event-plugin.gateway-startup', description: 'Broadcast gateway.startup events' },
+    handlers.handleGatewayStartup,
+  );
+
+  // Plugin typed hook surface.
+  registerTypedHooks(api, { state, logger, ops });
+
+  if (!isStatusTickerDisabled()) {
+    ops.startStatusTimer(state.config.status.tickIntervalMs, () => {
+      void ops.emitAgentStatusTransitions();
+      void ops.emitSubagentIdleTransitions();
+    });
+  }
+
+  state.isInitialized = true;
+  logger.info('Plugin activated successfully');
+}
+
+async function deactivate(): Promise<void> {
+  const ops = createRuntimeEventOps(state, logger);
+  resetState(ops);
+  state.websocketEnabled = true;
+  state.isInitialized = false;
+  await stopBroadcastServer();
+  logger.info('Plugin deactivated');
+}
+
+const plugin = {
+  id: 'event-server-plugin',
+  name: 'OpenClaw Event Server Plugin',
+  version: PLUGIN_VERSION,
+  configSchema: CONFIG_SCHEMA,
+  activate,
+  deactivate,
+};
+
+export default plugin;

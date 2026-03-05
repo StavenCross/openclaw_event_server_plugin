@@ -1,0 +1,75 @@
+{
+  // ---------------------------------------------------------------------------
+  // PURPOSE
+  // Strict human approval flow for web-related tools via Slack.
+  //
+  // WHEN TO USE
+  // - You want non-exec tools gated behind explicit human review.
+  // - Typical tools: `web_search`, `web_fetch`, `browser`.
+  //
+  // FLOW
+  // 1) Rule matches a tool call.
+  // 2) Tool Guard invokes local script action.
+  // 3) Script posts approval request to Slack thread.
+  // 4) Human approves/rejects by reply or reaction.
+  // 5) Script returns `{block:false}` or `{block:true,...}`.
+  //
+  // FAILURE MODE
+  // - `onError: "block"` means fail-closed for safer production behavior.
+  // ---------------------------------------------------------------------------
+  "allowedActionDirs": [
+    // Only scripts under these directories can be executed.
+    "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts"
+  ],
+  "actions": {
+    "request-web-tool-approval": {
+      "type": "local_script",
+      "path": "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts/web-browse-slack-human-approval.sh",
+      "args": [],
+      // Must be >= script poll timeout + expected human response window.
+      "timeoutMs": 120000
+    }
+  },
+  "toolGuard": {
+    "enabled": true,
+    "dryRun": false,
+    // Sync hook timeout. Keep this aligned with action timeout budget.
+    "timeoutMs": 120000,
+    // Fail-closed: if script errors/timeouts, block the call.
+    "onError": "block",
+    "scopeKeyBy": "tool_and_params",
+    "retryBackoffMs": 15000,
+    // Approval decisions are not cached in this strict example.
+    "approvalCacheTtlMs": 0,
+    "rules": [
+      {
+        "id": "web-search-requires-human-approval",
+        "priority": 100,
+        "when": {
+          "toolName": "web_search"
+        },
+        "action": "request-web-tool-approval",
+        // Prevent duplicate spam notifications on rapid retries.
+        "cooldownMs": 2000
+      },
+      {
+        "id": "web-fetch-requires-human-approval",
+        "priority": 80,
+        "when": {
+          "toolName": "web_fetch"
+        },
+        "action": "request-web-tool-approval",
+        "cooldownMs": 2000
+      },
+      {
+        "id": "browser-requires-human-approval",
+        "priority": 70,
+        "when": {
+          "toolName": "browser"
+        },
+        "action": "request-web-tool-approval",
+        "cooldownMs": 2000
+      }
+    ]
+  }
+}

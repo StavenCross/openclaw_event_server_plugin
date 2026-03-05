@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "default": {
+      "channel": "slack",
+      "account": "main",
+      "target": "C0123456789",
+      "allowedUserIds": [
+        "U0123456789"
+      ]
+    },
+    "ops": {
+      "channel": "discord",
+      "account": "main",
+      "target": "123456789012345678"
+    }
+  }
+}

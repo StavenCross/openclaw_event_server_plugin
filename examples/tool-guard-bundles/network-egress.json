@@ -1,0 +1,35 @@
+{
+  "scopeKeyBy": "tool_and_params",
+  "retryBackoffMs": 10000,
+  "approvalCacheTtlMs": 60000,
+  "rules": [
+    {
+      "id": "web-browse-require-https",
+      "priority": 100,
+      "when": {
+        "toolName": "web_browse",
+        "notMatchesRegex": {
+          "data.params.url": "^https://"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReasonTemplate": "Malformed {{toolName}} URL: {{path:data.params.url}}. Use https://..."
+      }
+    },
+    {
+      "id": "web-browse-block-private-hosts",
+      "priority": 90,
+      "when": {
+        "toolName": "web_browse",
+        "matchesRegex": {
+          "data.params.url": "^(https?://)?(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReason": "Private/internal hosts are not allowed for web browsing."
+      }
+    }
+  ]
+}

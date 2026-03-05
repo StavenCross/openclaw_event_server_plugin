@@ -1,0 +1,77 @@
+{
+  // ---------------------------------------------------------------------------
+  // PURPOSE
+  // Notify humans when `exec` uses sudo, then allow execution to continue.
+  //
+  // WHEN TO USE
+  // - You need visibility/audit pings, but not hard blocking.
+  //
+  // IMPORTANT
+  // - Action script in this bundle is fail-open by design.
+  // - For strict approval (allow/reject), use the interactive approval script
+  //   pattern from `web-browse-human-approval`.
+  // ---------------------------------------------------------------------------
+  "allowedActionDirs": [
+    // Restricts local_script execution to trusted directories.
+    "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts"
+  ],
+  "actions": {
+    "notify-slack-sudo-approval": {
+      "type": "local_script",
+      "path": "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts/sudo-slack-approval-and-allow.sh",
+      "args": []
+    }
+  },
+  "toolGuard": {
+    "scopeKeyBy": "tool_and_params",
+    "retryBackoffMs": 15000,
+    "approvalCacheTtlMs": 30000,
+    "rules": [
+      {
+        // Sanity precondition for exec payload shape.
+        "id": "exec-require-command",
+        "priority": 100,
+        "when": {
+          "toolName": "exec",
+          "requiredPaths": [
+            "data.params.command"
+          ],
+          "typeChecks": {
+            "data.params.command": "string"
+          }
+        },
+        "decision": {
+          "block": false
+        },
+        "stopOnMatch": false
+      },
+      {
+        // Keep explicit destructive patterns hard-blocked.
+        "id": "exec-block-destructive-rm",
+        "priority": 90,
+        "when": {
+          "toolName": "exec",
+          "matchesRegex": {
+            "data.params.command": "(^|\\s)rm\\s+-rf\\s+(/|\\*)"
+          }
+        },
+        "decision": {
+          "block": true,
+          "blockReason": "Destructive rm commands are blocked."
+        }
+      },
+      {
+        // Route sudo calls to an action script that posts Slack notification.
+        "id": "exec-sudo-notify-human-and-allow",
+        "priority": 80,
+        "when": {
+          "toolName": "exec",
+          "contains": {
+            "data.params.command": "sudo"
+          }
+        },
+        "action": "notify-slack-sudo-approval"
+      }
+    ]
+  }
+}

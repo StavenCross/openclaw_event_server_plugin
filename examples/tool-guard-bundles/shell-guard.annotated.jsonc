@@ -1,0 +1,68 @@
+{
+  // ---------------------------------------------------------------------------
+  // PURPOSE
+  // Static guardrails for `exec` usage.
+  //
+  // WHEN TO USE
+  // - You want deterministic command policy without external dependencies.
+  //
+  // POLICY SHAPE
+  // 1) Validate command payload exists and is a string.
+  // 2) Block obviously destructive patterns.
+  // 3) Block sudo by default (pair with approval flow if needed).
+  // ---------------------------------------------------------------------------
+  "scopeKeyBy": "tool_and_params",
+  "retryBackoffMs": 15000,
+  "approvalCacheTtlMs": 30000,
+  "rules": [
+    {
+      // Guard-rail prerequisite: ensure `data.params.command` exists.
+      "id": "exec-require-command",
+      "priority": 100,
+      "when": {
+        "toolName": "exec",
+        "requiredPaths": [
+          "data.params.command"
+        ],
+        "typeChecks": {
+          "data.params.command": "string"
+        }
+      },
+      // Decision is allow, but keep evaluating lower-priority rules.
+      "decision": {
+        "block": false
+      },
+      "stopOnMatch": false
+    },
+    {
+      // Hard block for a high-risk destructive pattern.
+      "id": "exec-block-destructive-rm",
+      "priority": 90,
+      "when": {
+        "toolName": "exec",
+        "matchesRegex": {
+          "data.params.command": "(^|\\s)rm\\s+-rf\\s+(/|\\*)"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReason": "Destructive rm commands are blocked."
+      }
+    },
+    {
+      // Policy default: require a different workflow for sudo.
+      "id": "exec-block-sudo",
+      "priority": 80,
+      "when": {
+        "toolName": "exec",
+        "contains": {
+          "data.params.command": "sudo"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReason": "sudo commands require explicit human approval."
+      }
+    }
+  ]
+}

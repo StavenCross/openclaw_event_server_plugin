@@ -1,0 +1,468 @@
+/**
+ * Unit tests for configuration merge and validation.
+ */
+
+import { DEFAULT_CONFIG, mergeConfig, PluginConfig, validateConfig } from '../../src/config';
+
+describe('mergeConfig', () => {
+  it('should merge configs with environment taking precedence', () => {
+    const baseConfig: Partial<PluginConfig> = {
+      enabled: true,
+      webhooks: [{ url: 'https://base.com' }],
+    };
+
+    const envConfig: Partial<PluginConfig> = {
+      webhooks: [{ url: 'https://env.com' }],
+    };
+
+    const merged = mergeConfig(baseConfig, envConfig);
+
+    expect(merged.enabled).toBe(true);
+    expect(merged.webhooks).toHaveLength(2);
+    expect(merged.webhooks[0].url).toBe('https://base.com');
+    expect(merged.webhooks[1].url).toBe('https://env.com');
+  });
+
+  it('should use defaults when no config provided', () => {
+    const merged = mergeConfig({}, {});
+
+    expect(merged.enabled).toBe(true);
+    expect(merged.retry.maxAttempts).toBe(3);
+    expect(merged.status.workingWindowMs).toBe(DEFAULT_CONFIG.status.workingWindowMs);
+    expect(merged.redaction.enabled).toBe(false);
+    expect(merged.eventLog.format).toBe('full-json');
+    expect(merged.security.ws.bindAddress).toBe('127.0.0.1');
+    expect(merged.hookBridge.enabled).toBe(false);
+    expect(merged.hookBridge.toolGuard.enabled).toBe(false);
+    expect(merged.hookBridge.toolGuard.onError).toBe('allow');
+  });
+
+  it('should deep-merge hook bridge defaults', () => {
+    const merged = mergeConfig(
+      {
+        hookBridge: {
+          ...DEFAULT_CONFIG.hookBridge,
+          enabled: true,
+          actions: {
+            base: {
+              type: 'webhook',
+              url: 'https://base.example.com',
+            },
+          },
+          rules: [],
+        },
+      },
+      {
+        hookBridge: {
+          ...DEFAULT_CONFIG.hookBridge,
+          enabled: true,
+          dryRun: true,
+          actions: {
+            env: {
+              type: 'webhook',
+              url: 'https://env.example.com',
+            },
+          },
+          rules: [
+            {
+              id: 'env-rule',
+              when: { eventType: 'tool.called' },
+              action: 'env',
+            },
+          ],
+        },
+      },
+    );
+
+    expect(merged.hookBridge.enabled).toBe(true);
+    expect(merged.hookBridge.dryRun).toBe(true);
+    expect(merged.hookBridge.actions.base).toBeDefined();
+    expect(merged.hookBridge.actions.env).toBeDefined();
+    expect(merged.hookBridge.rules).toHaveLength(1);
+    expect(merged.hookBridge.toolGuard.enabled).toBe(false);
+    expect(merged.hookBridge.toolGuard.timeoutMs).toBe(DEFAULT_CONFIG.hookBridge.toolGuard.timeoutMs);
+  });
+});
+
+describe('validateConfig', () => {
+  it('should validate correct config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: 'https://valid.com' }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should detect invalid webhook URL', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: 'not-a-url' }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook 0: Invalid URL format');
+  });
+
+  it('should detect invalid hook bridge tool guard config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      hookBridge: {
+        ...DEFAULT_CONFIG.hookBridge,
+        toolGuard: {
+          ...DEFAULT_CONFIG.hookBridge.toolGuard,
+          enabled: true,
+          timeoutMs: 50,
+          onError: 'deny' as unknown as 'allow' | 'block',
+          redaction: {
+            enabled: true,
+            replacement: '',
+            fields: 'command' as unknown as string[],
+          },
+          rules: [
+            {
+              id: 'guard-1',
+              when: {
+                toolName: 'exec',
+                matchesRegex: {
+                  'data.params.command': '[',
+                },
+              },
+              action: 'missing-action',
+            },
+            {
+              id: 'guard-2',
+              when: { toolName: 'web_browse' },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Hook bridge toolGuard.timeoutMs must be between 100 and 120000');
+    expect(result.errors).toContain('Hook bridge toolGuard.onError must be allow or block');
+    expect(result.errors).toContain('Hook bridge toolGuard.redaction.replacement cannot be empty');
+    expect(result.errors).toContain('Hook bridge toolGuard.redaction.fields must be an array');
+    expect(result.errors).toContain(
+      'Hook bridge toolGuard rule 0: action "missing-action" is not registered',
+    );
+    expect(result.errors).toContain(
+      'Hook bridge toolGuard rule 0: matchesRegex pattern at "data.params.command" is invalid',
+    );
+    expect(result.errors).toContain('Hook bridge toolGuard rule 1: action or decision is required');
+  });
+
+  it('should detect empty webhook URL', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: '' }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook 0: URL is required');
+  });
+
+  it('should detect whitespace-only webhook URL', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: '   ' }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook 0: URL is required');
+  });
+
+  it('should detect non-HTTP/HTTPS webhook URL', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: 'ftp://invalid.com' }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook 0: Only HTTP and HTTPS protocols are allowed');
+  });
+
+  it('should detect invalid HTTP method', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhooks: [{ url: 'https://valid.com', method: 'GET' as never }],
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook 0: Invalid HTTP method. Must be POST, PUT, or PATCH');
+  });
+
+  it('should detect invalid retry config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      retry: { ...DEFAULT_CONFIG.retry, maxAttempts: 15 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Retry maxAttempts must be between 0 and 10');
+  });
+
+  it('should detect invalid retry initialDelayMs', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      retry: { ...DEFAULT_CONFIG.retry, initialDelayMs: 50 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Retry initialDelayMs must be between 100 and 10000');
+  });
+
+  it('should detect invalid retry maxDelayMs', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      retry: { ...DEFAULT_CONFIG.retry, maxDelayMs: 500000 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Retry maxDelayMs must be between 1000 and 300000');
+  });
+
+  it('should detect invalid retry backoffMultiplier', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      retry: { ...DEFAULT_CONFIG.retry, backoffMultiplier: 0.5 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Retry backoffMultiplier must be between 1 and 5');
+  });
+
+  it('should detect invalid queue config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      queue: { ...DEFAULT_CONFIG.queue, maxSize: 5 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Queue maxSize must be between 10 and 10000');
+  });
+
+  it('should detect invalid queue flushIntervalMs', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      queue: { ...DEFAULT_CONFIG.queue, flushIntervalMs: 50 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Queue flushIntervalMs must be between 100 and 60000');
+  });
+
+  it('should detect invalid status config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      status: { ...DEFAULT_CONFIG.status, workingWindowMs: 500 },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Status workingWindowMs must be between 1000 and 120000');
+  });
+
+  it('should detect sleeping window less than working window', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      status: {
+        ...DEFAULT_CONFIG.status,
+        workingWindowMs: 60000,
+        sleepingWindowMs: 30000,
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Status sleepingWindowMs must be greater than workingWindowMs');
+  });
+
+  it('should detect invalid redaction replacement', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      redaction: {
+        ...DEFAULT_CONFIG.redaction,
+        replacement: '',
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Redaction replacement cannot be empty');
+  });
+
+  it('should detect invalid event log config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      eventLog: {
+        ...DEFAULT_CONFIG.eventLog,
+        path: '',
+        format: 'invalid' as 'full-json',
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Event log path cannot be empty');
+    expect(result.errors).toContain('Event log format must be full-json or summary');
+  });
+
+  it('should detect invalid event log max file size', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      eventLog: {
+        ...DEFAULT_CONFIG.eventLog,
+        maxFileSizeMb: 0,
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Event log maxFileSizeMb must be between 1 and 1024');
+  });
+
+  it('should detect invalid security config', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      security: {
+        ws: {
+          ...DEFAULT_CONFIG.security.ws,
+          bindAddress: '',
+          requireAuth: true,
+          authToken: '',
+        },
+        hmac: {
+          ...DEFAULT_CONFIG.security.hmac,
+          enabled: true,
+          secret: '',
+          secretFilePath: undefined,
+          algorithm: 'bad' as 'sha256',
+        },
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Security ws.bindAddress cannot be empty');
+    expect(result.errors).toContain('Security ws.authToken is required when ws.requireAuth is true');
+    expect(result.errors).toContain(
+      'Security hmac.secret or hmac.secretFilePath is required when hmac.enabled is true',
+    );
+    expect(result.errors).toContain('Security hmac.algorithm must be sha256 or sha512');
+  });
+
+  it('should validate hook bridge action and rule references', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      hookBridge: {
+        ...DEFAULT_CONFIG.hookBridge,
+        enabled: true,
+        allowedActionDirs: ['relative/path'],
+        actions: {
+          badWebhook: {
+            type: 'webhook',
+            url: 'ftp://invalid-endpoint',
+            timeoutMs: 10,
+          },
+          badScript: {
+            type: 'local_script',
+            path: 'relative-script.sh',
+            args: ['ok', 1 as unknown as string],
+            timeoutMs: 130000,
+            maxPayloadBytes: 100,
+          },
+        },
+        rules: [
+          {
+            id: 'test-rule',
+            when: { eventType: 'tool.called' },
+            action: 'missing-action',
+          },
+        ],
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Hook bridge allowedActionDirs[0] must be an absolute path');
+    expect(result.errors).toContain(
+      'Hook bridge action "badWebhook" webhook URL must use HTTP or HTTPS',
+    );
+    expect(result.errors).toContain(
+      'Hook bridge action "badWebhook" timeoutMs must be between 100 and 120000',
+    );
+    expect(result.errors).toContain('Hook bridge action "badScript" script path must be absolute');
+    expect(result.errors).toContain(
+      'Hook bridge action "badScript" timeoutMs must be between 100 and 120000',
+    );
+    expect(result.errors).toContain(
+      'Hook bridge action "badScript" maxPayloadBytes must be between 1024 and 1048576',
+    );
+    expect(result.errors).toContain(
+      'Hook bridge action "badScript" args must be an array of strings',
+    );
+    expect(result.errors).toContain(
+      'Hook bridge rule 0: action "missing-action" is not registered',
+    );
+  });
+
+  it('should detect invalid timeout', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      webhookTimeoutMs: 500,
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Webhook timeout must be between 1000 and 60000 ms');
+  });
+
+  it('should detect empty correlation ID header', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      correlationIdHeader: '',
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Correlation ID header name cannot be empty');
+  });
+});

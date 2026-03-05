@@ -1,0 +1,52 @@
+{
+  "scopeKeyBy": "tool_and_params",
+  "retryBackoffMs": 15000,
+  "approvalCacheTtlMs": 30000,
+  "rules": [
+    {
+      "id": "exec-require-command",
+      "priority": 100,
+      "when": {
+        "toolName": "exec",
+        "requiredPaths": [
+          "data.params.command"
+        ],
+        "typeChecks": {
+          "data.params.command": "string"
+        }
+      },
+      "decision": {
+        "block": false
+      },
+      "stopOnMatch": false
+    },
+    {
+      "id": "exec-block-destructive-rm",
+      "priority": 90,
+      "when": {
+        "toolName": "exec",
+        "matchesRegex": {
+          "data.params.command": "(^|\\s)rm\\s+-rf\\s+(/|\\*)"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReason": "Destructive rm commands are blocked."
+      }
+    },
+    {
+      "id": "exec-block-sudo",
+      "priority": 80,
+      "when": {
+        "toolName": "exec",
+        "contains": {
+          "data.params.command": "sudo"
+        }
+      },
+      "decision": {
+        "block": true,
+        "blockReason": "sudo commands require explicit human approval."
+      }
+    }
+  ]
+}

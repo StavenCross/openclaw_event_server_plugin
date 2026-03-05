@@ -1,0 +1,847 @@
+{
+  "id": "event-server-plugin",
+  "name": "OpenClaw Event Server Plugin",
+  "version": "1.0.0",
+  "description": "Broadcasts OpenClaw internal/plugin hook events to WebSocket and webhooks with synthetic agent status/activity signals",
+  "homepage": "https://github.com/openclaw/openclaw-event-server-plugin",
+  "author": "OpenClaw Community",
+  "license": "MIT",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable/disable the plugin",
+        "default": true
+      },
+      "webhooks": {
+        "type": "array",
+        "description": "Webhook endpoints to broadcast events to",
+        "items": {
+          "type": "object",
+          "required": ["url"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Webhook URL endpoint"
+            },
+            "method": {
+              "type": "string",
+              "enum": ["POST", "PUT", "PATCH"],
+              "default": "POST",
+              "description": "HTTP method for webhook requests"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Custom HTTP headers"
+            },
+            "authToken": {
+              "type": "string",
+              "description": "Authentication token (Bearer)"
+            },
+            "includeFullPayload": {
+              "type": "boolean",
+              "default": true,
+              "description": "Include full event payload"
+            }
+          }
+        },
+        "default": []
+      },
+      "filters": {
+        "type": "object",
+        "description": "Event filtering configuration",
+        "properties": {
+          "includeTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "message.received",
+                "message.transcribed",
+                "message.preprocessed",
+                "message.sent",
+                "message.edited",
+                "message.deleted",
+                "tool.called",
+                "tool.guard.matched",
+                "tool.guard.allowed",
+                "tool.guard.blocked",
+                "tool.completed",
+                "tool.error",
+                "tool.result_persist",
+                "command.new",
+                "command.reset",
+                "command.stop",
+                "session.start",
+                "session.end",
+                "subagent.spawning",
+                "subagent.spawned",
+                "subagent.ended",
+                "subagent.idle",
+                "agent.bootstrap",
+                "agent.error",
+                "agent.session_start",
+                "agent.session_end",
+                "agent.sub_agent_spawn",
+                "agent.status",
+                "agent.activity",
+                "gateway.startup",
+                "gateway.start",
+                "gateway.stop",
+                "session.spawned",
+                "session.completed",
+                "session.error"
+              ]
+            },
+            "description": "Event types to include (empty = all)"
+          },
+          "excludeTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "message.received",
+                "message.transcribed",
+                "message.preprocessed",
+                "message.sent",
+                "message.edited",
+                "message.deleted",
+                "tool.called",
+                "tool.guard.matched",
+                "tool.guard.allowed",
+                "tool.guard.blocked",
+                "tool.completed",
+                "tool.error",
+                "tool.result_persist",
+                "command.new",
+                "command.reset",
+                "command.stop",
+                "session.start",
+                "session.end",
+                "subagent.spawning",
+                "subagent.spawned",
+                "subagent.ended",
+                "subagent.idle",
+                "agent.bootstrap",
+                "agent.error",
+                "agent.session_start",
+                "agent.session_end",
+                "agent.sub_agent_spawn",
+                "agent.status",
+                "agent.activity",
+                "gateway.startup",
+                "gateway.start",
+                "gateway.stop",
+                "session.spawned",
+                "session.completed",
+                "session.error"
+              ]
+            },
+            "description": "Event types to exclude"
+          },
+          "channelId": {
+            "type": "string",
+            "description": "Filter by channel ID"
+          },
+          "toolName": {
+            "type": "string",
+            "description": "Filter by tool name"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Filter by session ID"
+          }
+        }
+      },
+      "retry": {
+        "type": "object",
+        "description": "Retry configuration for failed webhooks",
+        "properties": {
+          "maxAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "default": 3
+          },
+          "initialDelayMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000,
+            "default": 1000
+          },
+          "maxDelayMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 30000
+          },
+          "backoffMultiplier": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 2
+          }
+        }
+      },
+      "queue": {
+        "type": "object",
+        "description": "Event queue configuration",
+        "properties": {
+          "maxSize": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 10000,
+            "default": 1000
+          },
+          "flushIntervalMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 60000,
+            "default": 5000
+          },
+          "persistToDisk": {
+            "type": "boolean",
+            "default": false
+          },
+          "persistPath": {
+            "type": "string",
+            "description": "Path for queue persistence"
+          }
+        }
+      },
+      "logging": {
+        "type": "object",
+        "description": "Logging configuration",
+        "properties": {
+          "debug": {
+            "type": "boolean",
+            "default": false
+          },
+          "logSuccess": {
+            "type": "boolean",
+            "default": false
+          },
+          "logErrors": {
+            "type": "boolean",
+            "default": true
+          },
+          "logQueue": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "status": {
+        "type": "object",
+        "description": "Synthetic status reducer windows and ticker interval",
+        "properties": {
+          "workingWindowMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 120000,
+            "default": 30000,
+            "description": "Events newer than this are considered working"
+          },
+          "sleepingWindowMs": {
+            "type": "integer",
+            "minimum": 10000,
+            "maximum": 86400000,
+            "default": 600000,
+            "description": "Events older than this are considered sleeping"
+          },
+          "tickIntervalMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 60000,
+            "default": 5000,
+            "description": "Interval for synthetic status transition checks"
+          },
+          "subagentIdleWindowMs": {
+            "type": "integer",
+            "minimum": 10000,
+            "maximum": 86400000,
+            "default": 300000,
+            "description": "Subagent idle threshold for synthetic subagent.idle events"
+          }
+        }
+      },
+      "redaction": {
+        "type": "object",
+        "description": "Optional payload redaction before transport",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "replacement": {
+            "type": "string",
+            "default": "[REDACTED]"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "content",
+              "newContent",
+              "originalContent",
+              "transcript",
+              "normalizedText",
+              "params",
+              "arguments",
+              "token",
+              "apiKey",
+              "api_key",
+              "authorization",
+              "authToken",
+              "password",
+              "secret"
+            ]
+          }
+        }
+      },
+      "eventLog": {
+        "type": "object",
+        "description": "Event and runtime log file output",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "path": {
+            "type": "string",
+            "description": "NDJSON log file path",
+            "default": ".event-server/events.ndjson"
+          },
+          "maxFileSizeMb": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1024,
+            "default": 30,
+            "description": "Maximum NDJSON log file size before truncation rollover (MB)"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["full-json", "summary"],
+            "default": "full-json"
+          },
+          "minLevel": {
+            "type": "string",
+            "enum": ["debug", "info", "warn", "error"],
+            "default": "debug"
+          },
+          "includeRuntimeLogs": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "security": {
+        "type": "object",
+        "description": "WebSocket and event signing security options",
+        "properties": {
+          "ws": {
+            "type": "object",
+            "properties": {
+              "bindAddress": {
+                "type": "string",
+                "default": "127.0.0.1"
+              },
+              "requireAuth": {
+                "type": "boolean",
+                "default": false
+              },
+              "authToken": {
+                "type": "string"
+              },
+              "allowedOrigins": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": []
+              },
+              "allowedIps": {
+                "type": "array",
+                "items": { "type": "string" },
+                "default": []
+              }
+            }
+          },
+          "hmac": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": false
+              },
+              "secret": {
+                "type": "string"
+              },
+              "secretFilePath": {
+                "type": "string",
+                "default": ".event-plugin-hmac.secret"
+              },
+              "algorithm": {
+                "type": "string",
+                "enum": ["sha256", "sha512"],
+                "default": "sha256"
+              }
+            }
+          }
+        }
+      },
+      "correlationIdHeader": {
+        "type": "string",
+        "default": "X-Correlation-ID"
+      },
+      "webhookTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 60000,
+        "default": 10000
+      },
+      "hookBridge": {
+        "type": "object",
+        "description": "Optional event-driven automation bridge",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false
+          },
+          "allowedActionDirs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "localScriptDefaults": {
+            "type": "object",
+            "properties": {
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 120000,
+                "default": 10000
+              },
+              "maxPayloadBytes": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 1048576,
+                "default": 65536
+              }
+            }
+          },
+          "actions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["webhook", "local_script"]
+                },
+                "url": { "type": "string" },
+                "method": {
+                  "type": "string",
+                  "enum": ["POST", "PUT", "PATCH"]
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "authToken": { "type": "string" },
+                "path": { "type": "string" },
+                "args": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "timeoutMs": { "type": "integer" },
+                "maxPayloadBytes": { "type": "integer" }
+              },
+              "required": ["type"]
+            },
+            "default": {}
+          },
+          "rules": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "enabled": { "type": "boolean" },
+                "action": { "type": "string" },
+                "cooldownMs": { "type": "integer", "minimum": 0 },
+                "coalesce": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "keyFields": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "windowMs": { "type": "number", "minimum": 1 },
+                    "strategy": { "type": "string", "enum": ["first", "latest"] }
+                  }
+                },
+                "when": {
+                  "type": "object",
+                  "properties": {
+                    "eventType": {
+                      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "toolName": {
+                      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "agentId": {
+                      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "sessionId": {
+                      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "sessionKey": {
+                      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                    },
+                    "contains": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "equals": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                      }
+                    },
+                    "requiredPaths": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "typeChecks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": ["string", "number", "boolean", "object", "array"]
+                      }
+                    },
+                    "inList": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                        }
+                      }
+                    },
+                    "notInList": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                        }
+                      }
+                    },
+                    "matchesRegex": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "notMatchesRegex": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "domainAllowlist": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "domainBlocklist": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "domainPath": { "type": "string" },
+                    "idleForMsGte": { "type": "number", "minimum": 0 },
+                    "parentStatus": { "type": "string" }
+                  }
+                }
+              },
+              "required": ["id", "when", "action"]
+            }
+          },
+          "toolGuard": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "default": false
+              },
+              "dryRun": {
+                "type": "boolean",
+                "default": false
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 120000,
+                "default": 15000
+              },
+              "onError": {
+                "type": "string",
+                "enum": ["allow", "block"],
+                "default": "allow"
+              },
+              "scopeKeyBy": {
+                "type": "string",
+                "enum": ["tool", "tool_and_params"],
+                "default": "tool_and_params"
+              },
+              "retryBackoffMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000,
+                "default": 10000
+              },
+              "retryBackoffReason": { "type": "string" },
+              "approvalCacheTtlMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400000,
+                "default": 60000
+              },
+              "stopOnMatchDefault": {
+                "type": "boolean",
+                "default": false
+              },
+              "redaction": {
+                "type": "object",
+                "properties": {
+                  "enabled": { "type": "boolean", "default": false },
+                  "replacement": { "type": "string", "default": "[REDACTED]" },
+                  "fields": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              "rules": {
+                "type": "array",
+                "default": [],
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "enabled": { "type": "boolean" },
+                    "priority": { "type": "integer" },
+                    "action": { "type": "string" },
+                    "decision": {
+                      "type": "object",
+                      "properties": {
+                        "block": { "type": "boolean" },
+                        "blockReason": { "type": "string" },
+                        "blockReasonTemplate": { "type": "string" },
+                        "params": { "type": "object" }
+                      }
+                    },
+                    "stopOnMatch": { "type": "boolean" },
+                    "cooldownMs": { "type": "integer", "minimum": 0 },
+                    "when": {
+                      "type": "object",
+                      "properties": {
+                        "eventType": {
+                          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        },
+                        "toolName": {
+                          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        },
+                        "agentId": {
+                          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        },
+                        "sessionId": {
+                          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        },
+                        "sessionKey": {
+                          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                        },
+                        "contains": {
+                          "type": "object",
+                          "additionalProperties": { "type": "string" }
+                        },
+                        "equals": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                          }
+                        },
+                        "requiredPaths": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "typeChecks": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "enum": ["string", "number", "boolean", "object", "array"]
+                          }
+                        },
+                        "inList": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                            }
+                          }
+                        },
+                        "notInList": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }]
+                            }
+                          }
+                        },
+                        "matchesRegex": {
+                          "type": "object",
+                          "additionalProperties": { "type": "string" }
+                        },
+                        "notMatchesRegex": {
+                          "type": "object",
+                          "additionalProperties": { "type": "string" }
+                        },
+                        "domainAllowlist": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "domainBlocklist": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "domainPath": { "type": "string" },
+                        "idleForMsGte": { "type": "number", "minimum": 0 },
+                        "parentStatus": { "type": "string" }
+                      }
+                    }
+                  },
+                  "required": ["id", "when"]
+                }
+              }
+            }
+          },
+          "runtime": {
+            "type": "object",
+            "properties": {
+              "maxPendingEvents": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000,
+                "default": 1000
+              },
+              "concurrency": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1024,
+                "default": 8
+              },
+              "dropPolicy": {
+                "type": "string",
+                "enum": ["drop_oldest", "drop_newest"],
+                "default": "drop_oldest"
+              }
+            }
+          },
+          "telemetry": {
+            "type": "object",
+            "properties": {
+              "highWatermarks": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "default": [70, 90, 100]
+              },
+              "slowActionMs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 600000,
+                "default": 2000
+              },
+              "failureRateWindowMs": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 3600000,
+                "default": 60000
+              },
+              "failureRateThresholdPct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "default": 20
+              },
+              "failureRateMinSamples": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000,
+                "default": 10
+              },
+              "saturationWindowMs": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 3600000,
+                "default": 10000
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enabled",
+      "description": "Enable or disable the event server plugin"
+    },
+    "webhooks": {
+      "label": "Webhooks",
+      "description": "List of webhook endpoints to broadcast events to"
+    },
+    "filters": {
+      "label": "Event Filters",
+      "description": "Configure which events to broadcast"
+    },
+    "retry": {
+      "label": "Retry Settings",
+      "description": "Configure retry behavior for failed webhook deliveries"
+    },
+    "queue": {
+      "label": "Queue Settings",
+      "description": "Configure event queue for reliable delivery"
+    },
+    "logging": {
+      "label": "Logging",
+      "description": "Configure plugin logging verbosity"
+    },
+    "status": {
+      "label": "Status Windows",
+      "description": "Configure synthetic status reducer windows and tick interval"
+    },
+    "redaction": {
+      "label": "Redaction",
+      "description": "Optionally redact sensitive payload fields before transport"
+    },
+    "eventLog": {
+      "label": "Event Log",
+      "description": "Configure full JSON event log and runtime log persistence"
+    },
+    "security": {
+      "label": "Security",
+      "description": "Configure WS bind/auth controls and optional HMAC signing"
+    },
+    "hookBridge": {
+      "label": "Hook Bridge",
+      "description": "Configure rule-based webhook/local script actions from plugin events"
+    }
+  }
+}

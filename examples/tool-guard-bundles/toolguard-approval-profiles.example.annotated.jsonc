@@ -1,0 +1,36 @@
+{
+  // ---------------------------------------------------------------------------
+  // PURPOSE
+  // Optional profile file consumed by approval scripts.
+  //
+  // LOCATION
+  // - Default expected path:
+  //   ~/.openclaw/toolguard-approval-profiles.json
+  //
+  // HOW IT WORKS
+  // - Scripts resolve `channel`, `account`, and `target` from selected profile.
+  // - `allowedUserIds` limits who can approve/reject.
+  // - Select profile with OPENCLAW_APPROVAL_PROFILE (defaults to "default").
+  // ---------------------------------------------------------------------------
+  "profiles": {
+    "default": {
+      // Channel adapter name from your OpenClaw channel config.
+      "channel": "slack",
+      // Account key under channels.<channel>.accounts.<account>.
+      "account": "main",
+      // Destination id (for Slack: channel ID like C...).
+      "target": "C0123456789",
+      // Explicit human approvers (recommended in production).
+      "allowedUserIds": [
+        "U0123456789"
+      ]
+    },
+    "ops": {
+      // Example for a non-Slack destination profile.
+      // Whether this is actionable depends on the script implementation.
+      "channel": "discord",
+      "account": "main",
+      "target": "123456789012345678"
+    }
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "name": "mission-control-baseline-v1",
+  "steps": [
+    {
+      "kind": "internal",
+      "event": "message:received",
+      "payload": {
+        "type": "message",
+        "action": "received",
+        "sessionKey": "mc-session-1",
+        "context": {
+          "from": "+15550001111",
+          "content": "status check",
+          "channelId": "whatsapp"
+        }
+      }
+    },
+    {
+      "kind": "internal",
+      "event": "message:preprocessed",
+      "payload": {
+        "type": "message",
+        "action": "preprocessed",
+        "sessionKey": "mc-session-1",
+        "context": {
+          "from": "+15550001111",
+          "content": "normalized text",
+          "channelId": "whatsapp"
+        }
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "before_tool_call",
+      "payload": {
+        "toolName": "web_search",
+        "params": { "q": "weather" },
+        "toolCallId": "mc-tool-1"
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "after_tool_call",
+      "payload": {
+        "toolName": "web_search",
+        "result": { "ok": true },
+        "toolCallId": "mc-tool-1"
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "tool_result_persist",
+      "payload": {
+        "toolName": "web_search",
+        "toolCallId": "mc-tool-1",
+        "message": { "type": "toolResult", "ok": true },
+        "isSynthetic": false
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "subagent_spawned",
+      "payload": {
+        "childSessionKey": "mc-child-1",
+        "agentId": "mc-child-agent",
+        "runId": "mc-run-1",
+        "mode": "session"
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "session_start",
+      "payload": {
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "typed",
+      "event": "session_end",
+      "payload": {
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1",
+        "messageCount": 5
+      },
+      "ctx": {
+        "agentId": "mc-agent",
+        "sessionId": "mc-session-1",
+        "sessionKey": "mc-session-1"
+      }
+    },
+    {
+      "kind": "internal",
+      "event": "command:new",
+      "payload": {
+        "type": "command",
+        "action": "new",
+        "sessionKey": "mc-session-1",
+        "context": {
+          "commandSource": "whatsapp"
+        }
+      }
+    },
+    {
+      "kind": "internal",
+      "event": "gateway:startup",
+      "payload": {
+        "type": "gateway",
+        "action": "startup",
+        "sessionKey": "gateway",
+        "context": {
+          "port": 3000
+        }
+      }
+    }
+  ],
+  "expectedTypes": [
+    "message.received",
+    "message.preprocessed",
+    "tool.called",
+    "tool.completed",
+    "tool.result_persist",
+    "subagent.spawned",
+    "agent.sub_agent_spawn",
+    "session.start",
+    "session.end",
+    "command.new",
+    "gateway.startup",
+    "agent.activity",
+    "agent.status"
+  ]
+}

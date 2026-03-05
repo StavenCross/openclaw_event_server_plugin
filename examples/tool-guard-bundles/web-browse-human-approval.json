@@ -1,0 +1,51 @@
+{
+  "allowedActionDirs": [
+    "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts"
+  ],
+  "actions": {
+    "request-web-tool-approval": {
+      "type": "local_script",
+      "path": "/absolute/path/to/openclaw_event_server_plugin/examples/tool-guard-bundles/scripts/web-browse-slack-human-approval.sh",
+      "args": [],
+      "timeoutMs": 120000
+    }
+  },
+  "toolGuard": {
+    "enabled": true,
+    "dryRun": false,
+    "timeoutMs": 120000,
+    "onError": "block",
+    "scopeKeyBy": "tool_and_params",
+    "retryBackoffMs": 15000,
+    "approvalCacheTtlMs": 0,
+    "rules": [
+      {
+        "id": "web-search-requires-human-approval",
+        "priority": 100,
+        "when": {
+          "toolName": "web_search"
+        },
+        "action": "request-web-tool-approval",
+        "cooldownMs": 2000
+      },
+      {
+        "id": "web-fetch-requires-human-approval",
+        "priority": 80,
+        "when": {
+          "toolName": "web_fetch"
+        },
+        "action": "request-web-tool-approval",
+        "cooldownMs": 2000
+      },
+      {
+        "id": "browser-requires-human-approval",
+        "priority": 70,
+        "when": {
+          "toolName": "browser"
+        },
+        "action": "request-web-tool-approval",
+        "cooldownMs": 2000
+      }
+    ]
+  }
+}

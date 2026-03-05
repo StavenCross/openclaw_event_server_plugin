@@ -1,0 +1,203 @@
+{
+  "enabled": true,
+  "webhooks": [
+    {
+      "url": "https://your-webhook-endpoint.com/events",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "authToken": "your-auth-token-here",
+      "includeFullPayload": true
+    }
+  ],
+  "filters": {
+    "includeTypes": [],
+    "excludeTypes": [],
+    "channelId": "",
+    "toolName": "",
+    "sessionId": ""
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "initialDelayMs": 1000,
+    "maxDelayMs": 30000,
+    "backoffMultiplier": 2
+  },
+  "queue": {
+    "maxSize": 1000,
+    "flushIntervalMs": 5000,
+    "persistToDisk": false,
+    "persistPath": ""
+  },
+  "logging": {
+    "debug": false,
+    "logSuccess": false,
+    "logErrors": true,
+    "logQueue": false
+  },
+  "status": {
+    "workingWindowMs": 30000,
+    "sleepingWindowMs": 600000,
+    "tickIntervalMs": 5000,
+    "subagentIdleWindowMs": 300000
+  },
+  "redaction": {
+    "enabled": false,
+    "replacement": "[REDACTED]",
+    "fields": [
+      "content",
+      "newContent",
+      "originalContent",
+      "transcript",
+      "normalizedText",
+      "params",
+      "arguments",
+      "token",
+      "apiKey",
+      "api_key",
+      "authorization",
+      "authToken",
+      "password",
+      "secret"
+    ]
+  },
+  "eventLog": {
+    "enabled": true,
+    "path": ".event-server/events.ndjson",
+    "maxFileSizeMb": 30,
+    "format": "full-json",
+    "minLevel": "debug",
+    "includeRuntimeLogs": true
+  },
+  "security": {
+    "ws": {
+      "bindAddress": "127.0.0.1",
+      "requireAuth": false,
+      "authToken": "",
+      "allowedOrigins": [],
+      "allowedIps": []
+    },
+    "hmac": {
+      "enabled": false,
+      "secret": "",
+      "secretFilePath": ".event-plugin-hmac.secret",
+      "algorithm": "sha256"
+    }
+  },
+  "correlationIdHeader": "X-Correlation-ID",
+  "webhookTimeoutMs": 10000,
+  "hookBridge": {
+    "enabled": false,
+    "dryRun": false,
+    "allowedActionDirs": ["/absolute/path/to/hooks"],
+    "localScriptDefaults": {
+      "timeoutMs": 10000,
+      "maxPayloadBytes": 65536
+    },
+    "actions": {
+      "sudo-alert-webhook": {
+        "type": "webhook",
+        "url": "https://example.com/hook/sudo-alert",
+        "method": "POST",
+        "headers": {
+          "X-Source": "openclaw-event-server-plugin"
+        },
+        "timeoutMs": 10000
+      },
+      "wake-parent-local": {
+        "type": "local_script",
+        "path": "/absolute/path/to/hooks/wake-parent.sh",
+        "args": [],
+        "timeoutMs": 10000,
+        "maxPayloadBytes": 65536
+      }
+    },
+    "rules": [
+      {
+        "id": "notify-sudo-usage",
+        "enabled": true,
+        "when": {
+          "eventType": "tool.called",
+          "toolName": "exec",
+          "contains": {
+            "data.params.command": "sudo"
+          }
+        },
+        "action": "sudo-alert-webhook",
+        "cooldownMs": 60000,
+        "coalesce": {
+          "enabled": false
+        }
+      },
+      {
+        "id": "wake-parent-on-subagent-idle",
+        "enabled": true,
+        "when": {
+          "eventType": "subagent.idle",
+          "idleForMsGte": 300000,
+          "parentStatus": "sleeping"
+        },
+        "action": "wake-parent-local",
+        "cooldownMs": 120000
+      }
+    ],
+    "toolGuard": {
+      "enabled": false,
+      "dryRun": false,
+      "timeoutMs": 15000,
+      "onError": "allow",
+      "scopeKeyBy": "tool_and_params",
+      "retryBackoffMs": 10000,
+      "retryBackoffReason": "Retry blocked. Back off briefly before retrying this tool call.",
+      "approvalCacheTtlMs": 60000,
+      "stopOnMatchDefault": false,
+      "redaction": {
+        "enabled": false,
+        "replacement": "[REDACTED]",
+        "fields": ["token", "authorization", "apiKey", "password", "secret"]
+      },
+      "rules": [
+        {
+          "id": "web-browse-url-must-be-https",
+          "priority": 100,
+          "enabled": true,
+          "when": {
+            "toolName": "web_browse",
+            "notMatchesRegex": {
+              "data.params.url": "^https://"
+            }
+          },
+          "decision": {
+            "block": true,
+            "blockReason": "Malformed web_browse URL. Use: web_browse \"https://...\""
+          },
+          "cooldownMs": 0
+        },
+        {
+          "id": "human-approve-exec",
+          "priority": 10,
+          "enabled": false,
+          "when": {
+            "toolName": "exec"
+          },
+          "action": "wake-parent-local",
+          "cooldownMs": 0
+        }
+      ]
+    },
+    "runtime": {
+      "maxPendingEvents": 1000,
+      "concurrency": 8,
+      "dropPolicy": "drop_oldest"
+    },
+    "telemetry": {
+      "highWatermarks": [70, 90, 100],
+      "slowActionMs": 2000,
+      "failureRateWindowMs": 60000,
+      "failureRateThresholdPct": 20,
+      "failureRateMinSamples": 10,
+      "saturationWindowMs": 10000
+    }
+  }
+}
