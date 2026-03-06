@@ -219,25 +219,9 @@ describe('HookBridge', () => {
   });
 
   it('uses approval cache for repeated allowed calls', async () => {
-    const decisionScriptPath = join(tempDir, 'allow-once.sh');
-    await writeFile(
-      decisionScriptPath,
-      `#!/bin/sh\nprintf '{"params":{"normalized":true}}'\n`,
-      'utf8',
-    );
-    await chmod(decisionScriptPath, 0o755);
-
     const bridge = new HookBridge(
       {
         ...DEFAULT_CONFIG.hookBridge,
-        allowedActionDirs: [tempDir],
-        actions: {
-          allowScript: {
-            type: 'local_script',
-            path: decisionScriptPath,
-            args: [],
-          },
-        },
         toolGuard: {
           ...DEFAULT_CONFIG.hookBridge.toolGuard,
           enabled: true,
@@ -246,7 +230,9 @@ describe('HookBridge', () => {
             {
               id: 'allow-read',
               when: { toolName: 'read' },
-              action: 'allowScript',
+              decision: {
+                params: { normalized: true },
+              },
             },
           ],
         },
@@ -263,7 +249,7 @@ describe('HookBridge', () => {
       params: { path: 'README.md' },
     });
 
-    expect(first?.decisionSource).toBe('action');
+    expect(first?.decisionSource).toBe('rule');
     expect(second?.decisionSource).toBe('cache');
     expect(second?.params).toEqual({ normalized: true });
   });
