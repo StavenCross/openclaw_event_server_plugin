@@ -80,7 +80,7 @@ Choose one install path:
 1. Install from npm (recommended for most users; no local build needed):
 
 ```bash
-openclaw plugins install @openclaw/event-server-plugin
+openclaw plugins install openclaw-event-server-plugin
 ```
 
 2. Install from local source (for contributors/dev):

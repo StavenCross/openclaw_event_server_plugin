@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/event-server-plugin",
+  "name": "openclaw-event-server-plugin",
   "version": "1.0.0",
   "description": "OpenClaw plugin for capturing and broadcasting events via webhooks",
   "main": "dist/index.js",
