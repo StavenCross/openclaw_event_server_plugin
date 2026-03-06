@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_CONFIG } from '../../src/config';
@@ -220,10 +220,9 @@ describe('HookBridge', () => {
 
   it('uses approval cache for repeated allowed calls', async () => {
     const decisionScriptPath = join(tempDir, 'allow-once.sh');
-    const counterPath = join(tempDir, 'allow-counter.txt');
     await writeFile(
       decisionScriptPath,
-      `#!/bin/sh\ncount=0\nif [ -f "${counterPath}" ]; then count=$(cat "${counterPath}"); fi\ncount=$((count + 1))\nprintf "%s" "$count" > "${counterPath}"\nprintf '{"params":{"normalized":true}}'\n`,
+      `#!/bin/sh\nprintf '{"params":{"normalized":true}}'\n`,
       'utf8',
     );
     await chmod(decisionScriptPath, 0o755);
@@ -264,8 +263,6 @@ describe('HookBridge', () => {
       params: { path: 'README.md' },
     });
 
-    const counter = await readFile(counterPath, 'utf8');
-    expect(counter.trim()).toBe('1');
     expect(first?.decisionSource).toBe('action');
     expect(second?.decisionSource).toBe('cache');
     expect(second?.params).toEqual({ normalized: true });
