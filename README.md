@@ -322,6 +322,13 @@ Recommended defaults for community deployments:
 
 For local setups, keep the shared HMAC secret in `.event-plugin-hmac.secret`. Set `security.hmac.enabled=true` (or `EVENT_PLUGIN_HMAC_ENABLED=true`) to enable event signing.
 
+## Contributing
+
+If you want to contribute code, docs, or examples:
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and PR expectations.
+- Read [SECURITY.md](SECURITY.md) for responsible vulnerability reporting.
+
 ## Hook Bridge Automation
 
 `hookBridge` enables event-driven automations directly from canonical plugin events. It can execute a local script or call a webhook when a matching event occurs.
