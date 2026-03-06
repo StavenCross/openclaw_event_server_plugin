@@ -247,9 +247,23 @@ describe('Plugin Hook Integration', () => {
     );
 
     await waitForEvents(4);
-    const blocked = latestEventByType('tool.guard.blocked');
-    const blockedParams = blocked.data.params as Record<string, unknown>;
-    expect(blockedParams.command).toBe('[REDACTED]');
+    let guardDecisionEvent: OpenClawEvent | undefined;
+    for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
+      const event = receiver.receivedEvents[index];
+      if (event.type === 'tool.guard.blocked' || event.type === 'tool.guard.allowed') {
+        guardDecisionEvent = event;
+        break;
+      }
+    }
+    if (!guardDecisionEvent) {
+      throw new Error(
+        `Expected a tool.guard decision event, saw: ${receiver.receivedEvents
+          .map((event) => event.type)
+          .join(', ')}`,
+      );
+    }
+    const decisionParams = guardDecisionEvent.data.params as Record<string, unknown>;
+    expect(decisionParams.command).toBe('[REDACTED]');
   });
 
   it('re-evaluates guard rules after retry backoff window expires', async () => {
