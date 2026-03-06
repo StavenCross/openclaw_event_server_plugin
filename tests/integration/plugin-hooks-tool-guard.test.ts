@@ -164,7 +164,8 @@ describe('Plugin Hook Integration', () => {
     expect(receiver.receivedEvents.some((event) => event.type === 'tool.guard.blocked')).toBe(true);
     const blocked = latestEventByType('tool.guard.blocked');
     const blockedParams = blocked.data.params as Record<string, unknown>;
-    expect(blockedParams.command).toBe('sudo whoami');
+    expect(blockedParams.__toolGuardBlocked).toBe(true);
+    expect(blockedParams.command).toBeNull();
   });
 
   it('redacts tool.guard event params only when toolGuard redaction is enabled', async () => {

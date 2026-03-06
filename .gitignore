@@ -7,3 +7,5 @@ npm-debug.log*
 .event-plugin-queue.json
 .event-plugin-hmac.secret
 .event-server/
+RELEASING.md
+scripts/release.sh

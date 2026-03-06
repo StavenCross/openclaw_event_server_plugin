@@ -75,18 +75,23 @@ Synthetic event types are computed by this plugin and are not native upstream ga
 
 ## Install
 
-Build artifacts are required. This plugin is TypeScript and must be compiled to `dist/` before use.
+Choose one install path:
+
+1. Install from npm (recommended for most users; no local build needed):
+
+```bash
+openclaw plugins install @openclaw/event-server-plugin
+```
+
+2. Install from local source (for contributors/dev):
 
 ```bash
 npm install
 npm run build
-```
-
-Install into OpenClaw from local path:
-
-```bash
 openclaw plugins install -l /absolute/path/to/openclaw_event_server_plugin
 ```
+
+When installing from local source, `dist/` must be built before installation.
 
 ## Compatibility
 
@@ -100,7 +105,7 @@ Compatibility is pinned to a known OpenClaw hook surface and enforced by contrac
 
 Use this as the primary runtime config for transport, retries, logging, security, filtering, redaction, status timing, and automation behavior.
 
-In `~/.openclaw/config.json`:
+In `~/.openclaw/openclaw.json`:
 
 ```json
 {
@@ -409,6 +414,8 @@ Example malformed-call filter without scripting:
 ### Tool Guard Replay
 
 You can replay captured tool calls against `toolGuard` policies before rollout:
+
+From a local source checkout:
 
 ```bash
 npm run build
