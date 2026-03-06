@@ -59,6 +59,20 @@ describe('Plugin Hook Integration', () => {
     throw new Error(`Expected emitted event of type ${expectedType}`);
   };
 
+  const waitForEventType = async (expectedType: string, timeoutMs = 2000): Promise<OpenClawEvent> => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
+        const event = receiver.receivedEvents[index];
+        if (event.type === expectedType) {
+          return event;
+        }
+      }
+      await wait(25);
+    }
+    throw new Error(`Timed out waiting for emitted event of type ${expectedType}`);
+  };
+
   beforeEach(async () => {
     api = new MockOpenClawApi();
     api.config = {
@@ -159,9 +173,8 @@ describe('Plugin Hook Integration', () => {
       blockReason: 'manual approval required',
     });
 
-    await waitForEvents(4);
+    await waitForEventType('tool.guard.blocked');
     expect(receiver.receivedEvents.some((event) => event.type === 'tool.guard.matched')).toBe(true);
-    expect(receiver.receivedEvents.some((event) => event.type === 'tool.guard.blocked')).toBe(true);
     const blocked = latestEventByType('tool.guard.blocked');
     const blockedParams = blocked.data.params as Record<string, unknown>;
     expect(blockedParams.__toolGuardBlocked).toBe(true);
