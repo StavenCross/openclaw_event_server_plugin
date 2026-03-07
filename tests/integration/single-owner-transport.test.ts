@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_CONFIG, type PluginConfig } from '../../src/config';
@@ -221,14 +221,6 @@ describe('single-owner transport', () => {
     ownerApi = new MockOpenClawApi();
     followerApi = new MockOpenClawApi();
 
-    const guardScriptPath = join(tempDir, 'guard.sh');
-    await writeFile(
-      guardScriptPath,
-      '#!/bin/sh\nprintf \'{"block":true,"blockReason":"owner relay still blocked"}\'\n',
-      'utf8',
-    );
-    await chmod(guardScriptPath, 0o755);
-
     ownerApi.config = buildConfig({ transport: { mode: 'owner' } }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
       transport: {
@@ -243,13 +235,7 @@ describe('single-owner transport', () => {
           timeoutMs: 10000,
           maxPayloadBytes: 65536,
         },
-        actions: {
-          guardLocal: {
-            type: 'local_script',
-            path: guardScriptPath,
-            args: [],
-          },
-        },
+        actions: {},
         rules: [],
         toolGuard: {
           ...DEFAULT_CONFIG.hookBridge.toolGuard,
@@ -259,7 +245,10 @@ describe('single-owner transport', () => {
             {
               id: 'guard-exec',
               when: { toolName: 'exec' },
-              action: 'guardLocal',
+              decision: {
+                block: true,
+                blockReason: 'owner relay still blocked',
+              },
             },
           ],
         },

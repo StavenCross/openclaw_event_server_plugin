@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.1 - 2026-03-07
+
+Patch release to replace the failed `v1.1.0` rollout with a CI-stable build.
+
+### Fixes
+
+- Removed a platform-sensitive assumption from the single-owner transport integration suite.
+- Updated the `keeps tool guard local in follower runtimes while owner transports the resulting guard events` test to use a static Tool Guard decision instead of a local shell script.
+- Kept the actual local-script Tool Guard coverage in the dedicated hook-bridge integration tests, where that behavior is already validated directly.
+
+### Why This Release Exists
+
+- `v1.1.0` was published, but the GitHub Actions runs for both `main` and the release tag failed on Linux.
+- The failure was isolated to one integration test that passed locally on macOS but intermittently returned `undefined` on the runner.
+- No transport code change was required for the fix; the issue was the test's platform-sensitive setup.
+
+### Validation
+
+- `npm run lint`
+- `npm run build`
+- `npm test -- --runInBand`
+
+Result:
+
+- 38 test suites passed
+- 251 tests passed
+- coverage thresholds passed
+
 ## 1.1.0 - 2026-03-07
 
 This feature release rolls up the full transport hardening and release engineering work landed on `main` on March 7, 2026.

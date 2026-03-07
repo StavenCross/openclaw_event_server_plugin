@@ -27,7 +27,7 @@ Every emitted event uses this envelope (`OpenClawEvent`):
 - `correlationId?: string`
 - `result?: unknown`
 - `error?: { message: string; code?: string; stack?: string; kind?: 'tool' | 'agent' | 'gateway' | 'unknown' }`
-- `pluginVersion: string` (currently `1.1.0`)
+- `pluginVersion: string` (currently `1.1.1`)
 - `signature?: { version: 'v1'; algorithm: 'sha256' | 'sha512'; timestamp: number; nonce: string; value: string }`
 - `data: Record<string, unknown>`
 - `metadata?: Record<string, unknown>`
@@ -58,7 +58,7 @@ Each canonical event is POST/PUT/PATCHed to each configured webhook.
 Request behavior:
 
 - Header `Content-Type: application/json`
-- Header `User-Agent: OpenClaw-Event-Plugin/1.1.0`
+- Header `User-Agent: OpenClaw-Event-Plugin/1.1.1`
 - Header `<correlationIdHeader>: <event.correlationId>` when present
 - Header `Authorization: Bearer <authToken>` when configured
 - Body:
