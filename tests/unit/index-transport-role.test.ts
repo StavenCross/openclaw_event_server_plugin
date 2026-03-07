@@ -1,9 +1,19 @@
 import { MockOpenClawApi } from '../mocks/openclaw-runtime';
 
 describe('plugin transport role transitions', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE: 'gateway',
+    };
+  });
+
   afterEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    process.env = originalEnv;
   });
 
   it('stops the websocket singleton when transport demotes to follower', async () => {
@@ -86,6 +96,130 @@ describe('plugin transport role transitions', () => {
 
     await expect(plugin.deactivate()).resolves.toBeUndefined();
     expect(() => plugin.activate(api as never)).not.toThrow();
+    await expect(plugin.deactivate()).resolves.toBeUndefined();
+  });
+
+  it('resolves auto transport mode to owner for gateway runtimes', async () => {
+    const seenModes: string[] = [];
+
+    jest.doMock('../../src/transport/manager', () => ({
+      TransportManager: class MockTransportManager {
+        constructor(params: { config: { mode: string }; onRoleChange?: (role: 'owner' | 'follower') => void }) {
+          seenModes.push(params.config.mode);
+          params.onRoleChange?.('owner');
+        }
+
+        start(): void {}
+        dispatch(): Promise<void> {
+          return Promise.resolve();
+        }
+        stop(): Promise<void> {
+          return Promise.resolve();
+        }
+      },
+    }));
+
+    const { createPlugin } = await import('../../src/index');
+    const plugin = createPlugin();
+    const api = new MockOpenClawApi();
+    api.config = {
+      enabled: true,
+      eventLog: {
+        enabled: false,
+      },
+      transport: {
+        mode: 'auto',
+      },
+    };
+
+    plugin.activate(api as never);
+    expect(seenModes).toEqual(['owner']);
+    await expect(plugin.deactivate()).resolves.toBeUndefined();
+  });
+
+  it('resolves auto transport mode to follower for agent runtimes', async () => {
+    process.env.EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE = 'agent';
+    const seenModes: string[] = [];
+
+    jest.doMock('../../src/transport/manager', () => ({
+      TransportManager: class MockTransportManager {
+        constructor(params: { config: { mode: string }; onRoleChange?: (role: 'owner' | 'follower') => void }) {
+          seenModes.push(params.config.mode);
+          params.onRoleChange?.('follower');
+        }
+
+        start(): void {}
+        dispatch(): Promise<void> {
+          return Promise.resolve();
+        }
+        stop(): Promise<void> {
+          return Promise.resolve();
+        }
+      },
+    }));
+
+    const { createPlugin } = await import('../../src/index');
+    const plugin = createPlugin();
+    const api = new MockOpenClawApi();
+    api.config = {
+      enabled: true,
+      eventLog: {
+        enabled: false,
+      },
+      transport: {
+        mode: 'auto',
+      },
+    };
+
+    plugin.activate(api as never);
+    expect(seenModes).toEqual(['follower']);
+    await expect(plugin.deactivate()).resolves.toBeUndefined();
+  });
+
+  it('warns when auto mode cannot positively identify the runtime kind', async () => {
+    process.env.EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE = 'unknown';
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const seenModes: string[] = [];
+
+    jest.doMock('../../src/transport/manager', () => ({
+      TransportManager: class MockTransportManager {
+        constructor(params: { config: { mode: string }; onRoleChange?: (role: 'owner' | 'follower') => void }) {
+          seenModes.push(params.config.mode);
+          params.onRoleChange?.('follower');
+        }
+
+        start(): void {}
+        dispatch(): Promise<void> {
+          return Promise.resolve();
+        }
+        stop(): Promise<void> {
+          return Promise.resolve();
+        }
+      },
+    }));
+
+    const { createPlugin } = await import('../../src/index');
+    const plugin = createPlugin();
+    const api = new MockOpenClawApi();
+    api.config = {
+      enabled: true,
+      eventLog: {
+        enabled: false,
+      },
+      transport: {
+        mode: 'auto',
+      },
+    };
+
+    plugin.activate(api as never);
+
+    expect(seenModes).toEqual(['follower']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[event-plugin:warn]',
+      '[Transport] Could not positively identify runtime kind in auto mode; defaulting to follower transport',
+    );
+
     await expect(plugin.deactivate()).resolves.toBeUndefined();
   });
 });

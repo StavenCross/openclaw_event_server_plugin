@@ -6,9 +6,17 @@ The plugin uses a coordinated owner model: one owner runtime handles transport a
 
 Configured via `transport.mode`:
 
-- `auto` (recommended)
+- `auto` (recommended, gateway runtime becomes owner)
 - `owner`
 - `follower`
+
+`auto` is safe-by-default:
+
+- gateway runtimes resolve to `owner`
+- agent and unknown runtimes resolve to `follower`
+- unknown is intentionally not allowed to self-promote
+
+If your gateway is launched through a wrapper or supervisor that changes the process title/argv, set `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=gateway` explicitly. Do the same for wrapped agent runtimes with `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=agent`.
 
 ## Owner Responsibilities
 
@@ -34,7 +42,7 @@ Behavior:
 
 - owner acquires lock via atomic create
 - heartbeat updates lock timestamp
-- stale lock takeover occurs when older than `lockStaleMs`
+- a fresh gateway owner can replace a stale lock when older than `lockStaleMs`
 - owner shutdown removes lock only if runtime owns it
 
 ## Relay Path
@@ -46,7 +54,7 @@ Followers send events to owner via local socket (`transport.socketPath`):
 - relay timeout controlled by `relayTimeoutMs`
 - reconnect attempts back off by `reconnectBackoffMs`
 
-If relay fails in `auto`, follower attempts promotion to owner.
+In `auto`, non-gateway runtimes stay followers permanently. They do not promote themselves to owner later.
 
 ## Deduplication
 
@@ -82,3 +90,8 @@ For multi-runtime hosts:
 - set `authToken`
 - leave `semanticDedupeEnabled: true` unless repeated same-payload events are expected
 - keep `maxPayloadBytes` aligned with your largest expected event payload
+
+This gives you a simple mental model:
+
+- gateway = public event hub
+- all other runtimes = local event producers that relay into the gateway

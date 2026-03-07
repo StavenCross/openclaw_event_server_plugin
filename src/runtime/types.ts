@@ -8,6 +8,7 @@ import { OpenClawEvent } from '../events/types';
 import { HookBridgeGuardDecision } from '../config';
 import { EventFileLogger } from '../logging';
 import type { TransportManager, TransportRole } from '../transport/manager';
+import type { OpenClawRuntimeKind } from './runtime-kind';
 
 export interface HookRegistrationOptions {
   name: string;
@@ -77,6 +78,7 @@ export interface PluginState {
   isInitialized: boolean;
   websocketEnabled: boolean;
   runtimeId: string;
+  runtimeKind: OpenClawRuntimeKind;
   transportRole: TransportRole;
   transportManager?: TransportManager;
   hookBridge?: HookBridgeRunner;

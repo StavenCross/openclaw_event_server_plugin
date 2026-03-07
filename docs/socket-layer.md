@@ -47,7 +47,7 @@ Validation on owner ingest:
 Failure behavior:
 
 - follower relay error causes retry/backoff
-- in `auto` mode follower may promote itself to owner when owner appears unavailable
+- in `auto` mode followers keep retrying the gateway owner; they do not self-promote
 
 ## Tuning Knobs
 
