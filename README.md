@@ -100,6 +100,7 @@ npm test
 Useful files:
 
 - `config.example.json`
+- `CHANGELOG.md`
 - `examples/tool-guard-bundles/`
 - `TESTING.md`
 - `CONTRIBUTING.md`

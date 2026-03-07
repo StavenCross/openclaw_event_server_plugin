@@ -27,6 +27,7 @@ import { detectOpenClawRuntimeKind, resolveAutoTransportMode } from './runtime/r
 import { createRuntimeEventOps } from './runtime/runtime-events';
 import { registerTypedHooks } from './runtime/typed-hooks';
 import { OpenClawPluginApi, PendingToolCall, PluginState, RuntimeLogger } from './runtime/types';
+import { PLUGIN_VERSION } from './version';
 import {
   getApiConfig,
   getWebSocketPorts,
@@ -36,8 +37,6 @@ import {
   registerInternalHook,
 } from './runtime/utils';
 import { TransportManager } from './transport/manager';
-
-const PLUGIN_VERSION = '1.0.0';
 const DEFAULT_WS_PORTS = [9011, 9012, 9013, 9014, 9015, 9016];
 const TOOL_GUARD_TRACE =
   process.env.EVENT_PLUGIN_TOOL_GUARD_TRACE === '1' ||

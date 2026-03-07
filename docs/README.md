@@ -19,3 +19,5 @@ This folder is the implementation-aligned documentation for `openclaw-event-serv
 ## Source Of Truth
 
 These docs were derived from the TypeScript implementation in `src/` and current tests in `tests/`. If behavior changes, update docs in this folder in the same PR.
+
+Release history and ship notes live in the root [CHANGELOG.md](../CHANGELOG.md).

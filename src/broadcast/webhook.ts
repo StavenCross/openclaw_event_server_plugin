@@ -3,6 +3,7 @@
  */
 
 import { OpenClawEvent, WebhookConfig, RetryConfig } from '../events/types';
+import { WEBHOOK_USER_AGENT } from '../version';
 
 let axiosImport: Promise<typeof import('axios')> | null = null;
 
@@ -102,7 +103,7 @@ export async function sendToWebhook(
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': 'OpenClaw-Event-Plugin/1.0.0',
+        'User-Agent': WEBHOOK_USER_AGENT,
         ...webhook.headers,
       };
 

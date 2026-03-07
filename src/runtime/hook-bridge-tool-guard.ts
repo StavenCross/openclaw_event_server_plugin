@@ -1,5 +1,6 @@
 import { HookBridgeGuardDecision, HookBridgeRule, HookBridgeToolGuardRule } from '../config';
 import { OpenClawEvent } from '../events/types';
+import { PLUGIN_VERSION } from '../version';
 import {
   matchesDomainList,
   matchesScalarOrList,
@@ -20,7 +21,7 @@ export function buildToolGuardEvent(params: {
   return {
     eventId: `tool-guard-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     schemaVersion: '1.1.0',
-    pluginVersion: '1.0.0',
+    pluginVersion: PLUGIN_VERSION,
     timestamp: new Date().toISOString(),
     type: 'tool.called',
     eventCategory: 'tool',

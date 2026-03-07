@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventCategory, EventError, EventSource, EventType, OpenClawEvent } from '../events/types';
-
-const PLUGIN_VERSION = '1.0.0';
+import { PLUGIN_VERSION } from '../version';
 const EVENT_SCHEMA_VERSION = '1.1.0';
 
 export interface CanonicalEventInput {

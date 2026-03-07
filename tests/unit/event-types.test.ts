@@ -16,6 +16,7 @@ import {
   createSessionErrorEvent,
   createAgentStatusEvent,
 } from '../../src/hooks';
+import { PLUGIN_VERSION } from '../../src/version';
 
 describe('Message Events', () => {
   describe('createMessageSentEvent', () => {
@@ -30,7 +31,7 @@ describe('Message Events', () => {
       expect(event.eventId).toBeDefined();
       expect(event.schemaVersion).toBe('1.1.0');
       expect(event.timestamp).toBeDefined();
-      expect(event.pluginVersion).toBe('1.0.0');
+      expect(event.pluginVersion).toBe(PLUGIN_VERSION);
       expect(event.data.to).toBe('+1234567890');
       expect(event.data.content).toBe('Hello!');
       expect(event.data.channelId).toBe('whatsapp');
