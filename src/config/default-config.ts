@@ -2,6 +2,20 @@ import { PluginConfig } from './config-types';
 
 export const DEFAULT_CONFIG: PluginConfig = {
   enabled: true,
+  transport: {
+    mode: 'auto',
+    lockPath: '.event-server/transport.lock',
+    socketPath: '.event-server/transport.sock',
+    lockStaleMs: 15000,
+    heartbeatMs: 5000,
+    relayTimeoutMs: 1500,
+    reconnectBackoffMs: 250,
+    maxPendingEvents: 2000,
+    maxPayloadBytes: 1024 * 1024,
+    authToken: undefined,
+    dedupeTtlMs: 60000,
+    semanticDedupeEnabled: true,
+  },
   webhooks: [],
   filters: {
     includeTypes: [],

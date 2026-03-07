@@ -7,6 +7,8 @@ import { DEFAULT_CONFIG, loadEnvConfig } from '../../src/config';
 describe('Configuration Defaults', () => {
   it('should have correct default values', () => {
     expect(DEFAULT_CONFIG.enabled).toBe(true);
+    expect(DEFAULT_CONFIG.transport.mode).toBe('auto');
+    expect(DEFAULT_CONFIG.transport.semanticDedupeEnabled).toBe(true);
     expect(DEFAULT_CONFIG.webhooks).toEqual([]);
     expect(DEFAULT_CONFIG.filters).toEqual({
       includeTypes: [],
@@ -91,6 +93,39 @@ describe('loadEnvConfig', () => {
     const config = loadEnvConfig();
 
     expect(config.enabled).toBe(false);
+  });
+
+  it('should load transport settings from environment', () => {
+    process.env.EVENT_PLUGIN_TRANSPORT_MODE = 'auto';
+    process.env.EVENT_PLUGIN_TRANSPORT_LOCK_PATH = '/tmp/transport.lock';
+    process.env.EVENT_PLUGIN_TRANSPORT_SOCKET_PATH = '/tmp/transport.sock';
+    process.env.EVENT_PLUGIN_TRANSPORT_LOCK_STALE_MS = '20000';
+    process.env.EVENT_PLUGIN_TRANSPORT_HEARTBEAT_MS = '4000';
+    process.env.EVENT_PLUGIN_TRANSPORT_RELAY_TIMEOUT_MS = '2500';
+    process.env.EVENT_PLUGIN_TRANSPORT_RECONNECT_BACKOFF_MS = '500';
+    process.env.EVENT_PLUGIN_TRANSPORT_MAX_PENDING_EVENTS = '250';
+    process.env.EVENT_PLUGIN_TRANSPORT_MAX_PAYLOAD_BYTES = '8192';
+    process.env.EVENT_PLUGIN_TRANSPORT_AUTH_TOKEN = 'relay-token';
+    process.env.EVENT_PLUGIN_TRANSPORT_DEDUPE_TTL_MS = '90000';
+    process.env.EVENT_PLUGIN_TRANSPORT_SEMANTIC_DEDUPE_ENABLED = 'false';
+
+    const config = loadEnvConfig();
+
+    expect(config.transport).toEqual({
+      ...DEFAULT_CONFIG.transport,
+      mode: 'auto',
+      lockPath: '/tmp/transport.lock',
+      socketPath: '/tmp/transport.sock',
+      lockStaleMs: 20000,
+      heartbeatMs: 4000,
+      relayTimeoutMs: 2500,
+      reconnectBackoffMs: 500,
+      maxPendingEvents: 250,
+      maxPayloadBytes: 8192,
+      authToken: 'relay-token',
+      dedupeTtlMs: 90000,
+      semanticDedupeEnabled: false,
+    });
   });
 
   it('should load status windows from environment', () => {

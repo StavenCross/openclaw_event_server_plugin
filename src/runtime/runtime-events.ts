@@ -15,7 +15,7 @@ import {
   resolveSessionRefForStatus,
 } from './utils';
 
-async function broadcastEvent(state: PluginState, logger: RuntimeLogger, event: OpenClawEvent): Promise<void> {
+async function transportEvent(state: PluginState, logger: RuntimeLogger, event: OpenClawEvent): Promise<void> {
   // Hook bridge rules should evaluate against canonical event payload before
   // transport-level redaction/signing so rule predicates remain functional.
   if (state.hookBridge) {
@@ -28,6 +28,7 @@ async function broadcastEvent(state: PluginState, logger: RuntimeLogger, event: 
 
   const redactedEvent = redactEvent(event, state.config.redaction);
   const outboundEvent = signEvent(redactedEvent, state.config.security.hmac);
+  await state.eventFileLoggerReady?.catch(() => undefined);
   state.eventFileLogger?.logEvent(outboundEvent);
 
   if (state.websocketEnabled) {
@@ -72,8 +73,17 @@ async function broadcastEvent(state: PluginState, logger: RuntimeLogger, event: 
   }
 }
 
+async function broadcastEvent(state: PluginState, logger: RuntimeLogger, event: OpenClawEvent): Promise<void> {
+  if (state.transportManager) {
+    await state.transportManager.dispatch(event);
+    return;
+  }
+
+  await transportEvent(state, logger, event);
+}
+
 function maybeInitializeQueue(state: PluginState, logger: RuntimeLogger): void {
-  if (state.queue !== undefined || state.config.webhooks.length === 0) {
+  if (state.transportRole === 'follower' || state.queue !== undefined || state.config.webhooks.length === 0) {
     return;
   }
 
@@ -226,6 +236,7 @@ function stopStatusTimer(state: PluginState): void {
 export function createRuntimeEventOps(state: PluginState, logger: RuntimeLogger) {
   return {
     broadcastEvent: (event: OpenClawEvent) => broadcastEvent(state, logger, event),
+    transportEvent: (event: OpenClawEvent) => transportEvent(state, logger, event),
     maybeInitializeQueue: () => maybeInitializeQueue(state, logger),
     emitAgentActivity: (params: EmitAgentActivityParams) => emitAgentActivity(state, logger, params),
     emitAgentStatusTransitions: (sourceEventType?: EventType) =>

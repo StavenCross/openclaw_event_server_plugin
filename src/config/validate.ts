@@ -1,9 +1,8 @@
 import { PluginConfig } from './config-types';
 import { isEventType } from './event-types';
 import { loadSecretFromFile } from './helpers';
+import { resolveRuntimePath, resolveTransportSocketPath } from './runtime-paths';
 import { validateHookBridgeConfig } from './validate-hook-bridge';
-import { homedir } from 'node:os';
-import { dirname, isAbsolute, resolve } from 'node:path';
 
 /**
  * Validate configuration
@@ -12,6 +11,40 @@ export function validateConfig(config: PluginConfig): { valid: boolean; errors: 
   const errors: string[] = [];
 
   // Validate webhooks
+  if (!['auto', 'owner', 'follower'].includes(config.transport.mode)) {
+    errors.push('Transport mode must be auto, owner, or follower');
+  }
+  if (!config.transport.lockPath || config.transport.lockPath.trim() === '') {
+    errors.push('Transport lockPath cannot be empty');
+  }
+  if (!config.transport.socketPath || config.transport.socketPath.trim() === '') {
+    errors.push('Transport socketPath cannot be empty');
+  }
+  if (config.transport.lockStaleMs < 1000) {
+    errors.push('Transport lockStaleMs must be at least 1000');
+  }
+  if (config.transport.heartbeatMs < 250) {
+    errors.push('Transport heartbeatMs must be at least 250');
+  }
+  if (config.transport.heartbeatMs >= config.transport.lockStaleMs) {
+    errors.push('Transport heartbeatMs must be less than lockStaleMs');
+  }
+  if (config.transport.relayTimeoutMs < 100) {
+    errors.push('Transport relayTimeoutMs must be at least 100');
+  }
+  if (config.transport.reconnectBackoffMs < 50) {
+    errors.push('Transport reconnectBackoffMs must be at least 50');
+  }
+  if (config.transport.maxPendingEvents < 1) {
+    errors.push('Transport maxPendingEvents must be at least 1');
+  }
+  if (config.transport.maxPayloadBytes < 1024) {
+    errors.push('Transport maxPayloadBytes must be at least 1024');
+  }
+  if (config.transport.dedupeTtlMs < 1000) {
+    errors.push('Transport dedupeTtlMs must be at least 1000');
+  }
+
   if (config.webhooks && config.webhooks.length > 0) {
     config.webhooks.forEach((webhook, index) => {
       if (!webhook.url || webhook.url.trim() === '') {
@@ -139,33 +172,23 @@ export function validateConfig(config: PluginConfig): { valid: boolean; errors: 
  * Resolve runtime-only config values (for example, loading HMAC secret from file).
  */
 export function resolveRuntimeConfig(config: PluginConfig): PluginConfig {
-  const resolveEventLogPath = (rawPath: string): string => {
-    const trimmedPath = rawPath.trim();
-    if (trimmedPath === '' || isAbsolute(trimmedPath)) {
-      return rawPath;
-    }
-
-    const stateDir = process.env.OPENCLAW_STATE_DIR?.trim();
-    if (stateDir) {
-      return resolve(stateDir, trimmedPath);
-    }
-
-    const configPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
-    if (configPath) {
-      return resolve(dirname(configPath), trimmedPath);
-    }
-
-    return resolve(homedir(), '.openclaw', trimmedPath);
-  };
-
   const resolvedSecret =
     config.security.hmac.secret ?? loadSecretFromFile(config.security.hmac.secretFilePath);
 
   return {
     ...config,
+    queue: {
+      ...config.queue,
+      ...(config.queue.persistPath ? { persistPath: resolveRuntimePath(config.queue.persistPath) } : {}),
+    },
+    transport: {
+      ...config.transport,
+      lockPath: resolveRuntimePath(config.transport.lockPath),
+      socketPath: resolveTransportSocketPath(config.transport.socketPath),
+    },
     eventLog: {
       ...config.eventLog,
-      path: resolveEventLogPath(config.eventLog.path),
+      path: resolveRuntimePath(config.eventLog.path),
     },
     security: {
       ...config.security,

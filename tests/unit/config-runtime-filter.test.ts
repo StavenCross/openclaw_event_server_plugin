@@ -8,6 +8,7 @@ import {
   resolveRuntimeConfig,
   shouldFilterEvent,
 } from '../../src/config';
+import { resolveTransportSocketPath } from '../../src/config/runtime-paths';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -48,6 +49,8 @@ describe('resolveRuntimeConfig', () => {
     });
 
     expect(config.eventLog.path).toBe('/tmp/openclaw-state/.event-server/events.ndjson');
+    expect(config.transport.lockPath).toBe('/tmp/openclaw-state/.event-server/transport.lock');
+    expect(config.transport.socketPath).toBe('/tmp/openclaw-state/.event-server/transport.sock');
   });
 
   it('resolves relative event log path against OPENCLAW_CONFIG_PATH directory', () => {
@@ -83,6 +86,10 @@ describe('resolveRuntimeConfig', () => {
   it('keeps absolute event log path unchanged', () => {
     const config = resolveRuntimeConfig({
       ...DEFAULT_CONFIG,
+      queue: {
+        ...DEFAULT_CONFIG.queue,
+        persistPath: '/var/lib/openclaw/queue.json',
+      },
       eventLog: {
         ...DEFAULT_CONFIG.eventLog,
         path: '/var/log/openclaw/events.ndjson',
@@ -90,6 +97,13 @@ describe('resolveRuntimeConfig', () => {
     });
 
     expect(config.eventLog.path).toBe('/var/log/openclaw/events.ndjson');
+    expect(config.queue.persistPath).toBe('/var/lib/openclaw/queue.json');
+  });
+
+  it('maps transport socket paths to named pipes on Windows', () => {
+    const resolved = resolveTransportSocketPath('.event-server/transport.sock', 'win32');
+    expect(resolved).toContain('\\\\.\\pipe\\');
+    expect(resolved).toContain('transport.sock');
   });
 });
 

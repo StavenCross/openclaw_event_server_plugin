@@ -15,6 +15,77 @@
         "description": "Enable/disable the plugin",
         "default": true
       },
+      "transport": {
+        "type": "object",
+        "description": "Single-owner transport coordination and relay configuration",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["auto", "owner", "follower"],
+            "description": "Select automatic owner election or force owner/follower transport behavior",
+            "default": "auto"
+          },
+          "lockPath": {
+            "type": "string",
+            "default": ".event-server/transport.lock"
+          },
+          "socketPath": {
+            "type": "string",
+            "default": ".event-server/transport.sock"
+          },
+          "lockStaleMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 15000
+          },
+          "heartbeatMs": {
+            "type": "integer",
+            "minimum": 250,
+            "maximum": 60000,
+            "default": 5000
+          },
+          "relayTimeoutMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 60000,
+            "default": 1500
+          },
+          "reconnectBackoffMs": {
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 30000,
+            "default": 250
+          },
+          "maxPendingEvents": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "default": 2000
+          },
+          "maxPayloadBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 10485760,
+            "default": 1048576
+          },
+          "authToken": {
+            "type": "string",
+            "description": "Optional auth token required for follower relay connections"
+          },
+          "dedupeTtlMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 600000,
+            "default": 60000
+          },
+          "semanticDedupeEnabled": {
+            "type": "boolean",
+            "description": "Apply semantic dedupe in addition to eventId retry dedupe",
+            "default": true
+          }
+        }
+      },
       "webhooks": {
         "type": "array",
         "description": "Webhook endpoints to broadcast events to",
@@ -806,6 +877,10 @@
     "webhooks": {
       "label": "Webhooks",
       "description": "List of webhook endpoints to broadcast events to"
+    },
+    "transport": {
+      "label": "Transport",
+      "description": "Coordinate a single transport owner and local relay followers"
     },
     "filters": {
       "label": "Event Filters",

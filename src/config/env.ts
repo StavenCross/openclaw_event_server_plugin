@@ -54,6 +54,60 @@ export function loadEnvConfig(): Partial<PluginConfig> {
     config.enabled = isTrue(enabled);
   }
 
+  // Transport
+  const transportMode = process.env.EVENT_PLUGIN_TRANSPORT_MODE;
+  const transportLockPath = process.env.EVENT_PLUGIN_TRANSPORT_LOCK_PATH;
+  const transportSocketPath = process.env.EVENT_PLUGIN_TRANSPORT_SOCKET_PATH;
+  const transportLockStaleMs = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_LOCK_STALE_MS);
+  const transportHeartbeatMs = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_HEARTBEAT_MS);
+  const transportRelayTimeoutMs = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_RELAY_TIMEOUT_MS);
+  const transportReconnectBackoffMs = parsePositiveInt(
+    process.env.EVENT_PLUGIN_TRANSPORT_RECONNECT_BACKOFF_MS,
+  );
+  const transportMaxPendingEvents = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_MAX_PENDING_EVENTS);
+  const transportMaxPayloadBytes = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_MAX_PAYLOAD_BYTES);
+  const transportAuthToken = process.env.EVENT_PLUGIN_TRANSPORT_AUTH_TOKEN;
+  const transportDedupeTtlMs = parsePositiveInt(process.env.EVENT_PLUGIN_TRANSPORT_DEDUPE_TTL_MS);
+  const transportSemanticDedupeEnabled = process.env.EVENT_PLUGIN_TRANSPORT_SEMANTIC_DEDUPE_ENABLED;
+  if (
+    transportMode ??
+    transportLockPath ??
+    transportSocketPath ??
+    transportLockStaleMs ??
+    transportHeartbeatMs ??
+    transportRelayTimeoutMs ??
+    transportReconnectBackoffMs ??
+    transportMaxPendingEvents ??
+    transportMaxPayloadBytes ??
+    transportAuthToken ??
+    transportDedupeTtlMs ??
+    transportSemanticDedupeEnabled
+  ) {
+    config.transport = {
+      ...DEFAULT_CONFIG.transport,
+      ...(transportMode === 'auto' ||
+      transportMode === 'owner' ||
+      transportMode === 'follower'
+        ? { mode: transportMode }
+        : {}),
+      ...(transportLockPath !== undefined ? { lockPath: transportLockPath } : {}),
+      ...(transportSocketPath !== undefined ? { socketPath: transportSocketPath } : {}),
+      ...(transportLockStaleMs !== undefined ? { lockStaleMs: transportLockStaleMs } : {}),
+      ...(transportHeartbeatMs !== undefined ? { heartbeatMs: transportHeartbeatMs } : {}),
+      ...(transportRelayTimeoutMs !== undefined ? { relayTimeoutMs: transportRelayTimeoutMs } : {}),
+      ...(transportReconnectBackoffMs !== undefined
+        ? { reconnectBackoffMs: transportReconnectBackoffMs }
+        : {}),
+      ...(transportMaxPendingEvents !== undefined ? { maxPendingEvents: transportMaxPendingEvents } : {}),
+      ...(transportMaxPayloadBytes !== undefined ? { maxPayloadBytes: transportMaxPayloadBytes } : {}),
+      ...(transportAuthToken !== undefined ? { authToken: transportAuthToken } : {}),
+      ...(transportDedupeTtlMs !== undefined ? { dedupeTtlMs: transportDedupeTtlMs } : {}),
+      ...(transportSemanticDedupeEnabled !== undefined
+        ? { semanticDedupeEnabled: isTrue(transportSemanticDedupeEnabled) }
+        : {}),
+    };
+  }
+
   // Synthetic status windows
   const workingWindowMs = parsePositiveInt(process.env.EVENT_PLUGIN_STATUS_WORKING_WINDOW_MS);
   const sleepingWindowMs = parsePositiveInt(process.env.EVENT_PLUGIN_STATUS_SLEEPING_WINDOW_MS);

@@ -28,6 +28,11 @@ export function mergeConfig(
       ...(baseConfig.queue ?? {}),
       ...(envConfig.queue ?? {}),
     },
+    transport: {
+      ...DEFAULT_CONFIG.transport,
+      ...(baseConfig.transport ?? {}),
+      ...(envConfig.transport ?? {}),
+    },
     logging: {
       ...DEFAULT_CONFIG.logging,
       ...(baseConfig.logging ?? {}),
