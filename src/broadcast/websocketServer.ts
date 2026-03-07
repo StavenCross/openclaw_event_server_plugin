@@ -391,9 +391,7 @@ let broadcastServer: BroadcastWebSocketServer | null = null;
  * Get or create the broadcast server instance
  */
 export function getBroadcastServer(options?: WebSocketServerOptions): BroadcastWebSocketServer {
-  if (!broadcastServer) {
-    broadcastServer = new BroadcastWebSocketServer(options);
-  }
+  broadcastServer ??= new BroadcastWebSocketServer(options);
   return broadcastServer;
 }
 

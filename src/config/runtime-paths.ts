@@ -1,5 +1,8 @@
-import { homedir } from 'node:os';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, extname, isAbsolute, resolve } from 'node:path';
+
+const MAX_UNIX_SOCKET_PATH_LENGTH = 100;
 
 function resolveRelativeRuntimePath(rawPath: string): string {
   const trimmedPath = rawPath.trim();
@@ -35,7 +38,14 @@ function sanitizePipeName(pathValue: string): string {
  */
 export function resolveTransportSocketPath(rawPath: string, platform = process.platform): string {
   if (platform !== 'win32') {
-    return resolveRelativeRuntimePath(rawPath);
+    const resolvedPath = resolveRelativeRuntimePath(rawPath);
+    if (resolvedPath.length <= MAX_UNIX_SOCKET_PATH_LENGTH) {
+      return resolvedPath;
+    }
+
+    const hash = createHash('sha256').update(resolvedPath).digest('hex').slice(0, 16);
+    const suffix = extname(resolvedPath) || '.sock';
+    return resolve(tmpdir(), `openclaw-event-${hash}${suffix}`);
   }
 
   const trimmedPath = rawPath.trim();

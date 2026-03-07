@@ -9,7 +9,7 @@ import {
   shouldFilterEvent,
 } from '../../src/config';
 import { resolveTransportSocketPath } from '../../src/config/runtime-paths';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 describe('resolveRuntimeConfig', () => {
@@ -104,6 +104,15 @@ describe('resolveRuntimeConfig', () => {
     const resolved = resolveTransportSocketPath('.event-server/transport.sock', 'win32');
     expect(resolved).toContain('\\\\.\\pipe\\');
     expect(resolved).toContain('transport.sock');
+  });
+
+  it('shortens long Unix transport socket paths to a tmpdir fallback', () => {
+    const longPath = `/tmp/${'nested/'.repeat(20)}transport.sock`;
+    const resolved = resolveTransportSocketPath(longPath, 'darwin');
+
+    expect(resolved).toContain(resolve(tmpdir(), 'openclaw-event-'));
+    expect(resolved.endsWith('.sock')).toBe(true);
+    expect(resolved.length).toBeLessThanOrEqual(100);
   });
 });
 

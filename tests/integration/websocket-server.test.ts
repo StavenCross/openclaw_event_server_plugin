@@ -83,7 +83,7 @@ async function waitForMessage(
         resolve(payload);
       } catch (error) {
         cleanup();
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     };
 

@@ -9,3 +9,4 @@ npm-debug.log*
 .event-server/
 RELEASING.md
 scripts/release.sh
+AGENTS.md

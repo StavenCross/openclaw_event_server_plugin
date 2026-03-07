@@ -235,8 +235,8 @@ export class EventQueue {
       }
     }, this.flushIntervalMs);
 
-    // Don't prevent process exit
-    if (this.flushTimer.unref) {
+    // Keep timers referenced in tests so Jest can observe queued webhook delivery.
+    if (process.env.NODE_ENV !== 'test' && this.flushTimer.unref) {
       this.flushTimer.unref();
     }
   }

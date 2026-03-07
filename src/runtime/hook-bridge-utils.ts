@@ -78,7 +78,7 @@ export function buildCoalesceKey(
         return event.type;
       }
       const value = readPath(event, field);
-      return value === undefined || value === null ? '' : String(value);
+      return toStableToken(value);
     })
     .filter((value) => value !== '');
 
@@ -100,7 +100,7 @@ export function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return String(error);
+  return toStableToken(error, 'Unknown error');
 }
 
 export function stableJsonStringify(value: unknown): string {
@@ -130,4 +130,25 @@ export function toCanonicalPath(path: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+export function toStableToken(value: unknown, fallback = ''): string {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === 'object') {
+    return stableJsonStringify(value);
+  }
+  return fallback;
 }

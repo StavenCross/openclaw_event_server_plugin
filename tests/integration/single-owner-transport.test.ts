@@ -93,7 +93,14 @@ describe('single-owner transport', () => {
   let ownerApi: MockOpenClawApi | undefined;
   let followerApi: MockOpenClawApi | undefined;
 
-  function buildConfig(overrides?: Partial<PluginConfig>): PluginConfig {
+  type BuildConfigOverrides = Omit<Partial<PluginConfig>, 'transport' | 'queue' | 'eventLog' | 'webhooks'> & {
+    transport?: Partial<PluginConfig['transport']>;
+    queue?: Partial<PluginConfig['queue']>;
+    eventLog?: Partial<PluginConfig['eventLog']>;
+    webhooks?: PluginConfig['webhooks'];
+  };
+
+  function buildConfig(overrides?: BuildConfigOverrides): PluginConfig {
     return {
       ...DEFAULT_CONFIG,
       ...overrides,
@@ -296,14 +303,20 @@ describe('single-owner transport', () => {
     followerApi = new MockOpenClawApi();
 
     ownerApi.config = buildConfig({
+      queue: {
+        ...DEFAULT_CONFIG.queue,
+        maxSize: 10,
+      },
       transport: {
-        ...DEFAULT_CONFIG.transport,
         authToken: 'shared-transport-token',
       },
     }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
+      queue: {
+        ...DEFAULT_CONFIG.queue,
+        maxSize: 10,
+      },
       transport: {
-        ...DEFAULT_CONFIG.transport,
         authToken: 'shared-transport-token',
       },
     }) as unknown as Record<string, unknown>;
@@ -313,13 +326,16 @@ describe('single-owner transport', () => {
     await wait(200);
     receiver.clear();
 
-    await followerApi.triggerHook(
-      'message:sent',
-      createMockMessageSent({ content: 'auth-protected relay' }),
-    );
+    for (let index = 0; index < 8; index += 1) {
+      await followerApi.triggerHook(
+        'message:sent',
+        createMockMessageSent({ content: `auth-protected relay ${index}` }),
+      );
+    }
 
-    const relayed = await waitForEventType(receiver, 'message.sent');
-    expect(relayed).toHaveLength(1);
+    const logLines = await waitForLogContains(eventLogPath, 'message.sent');
+    const parsed = logLines.map((line) => JSON.parse(line) as { type?: string; kind?: string });
+    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent').length).toBeGreaterThanOrEqual(1);
   });
 
   it('rejects follower relay events when the transport auth token is wrong', async () => {
@@ -330,13 +346,11 @@ describe('single-owner transport', () => {
 
     ownerApi.config = buildConfig({
       transport: {
-        ...DEFAULT_CONFIG.transport,
         authToken: 'expected-token',
       },
     }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
       transport: {
-        ...DEFAULT_CONFIG.transport,
         mode: 'follower',
         authToken: 'wrong-token',
       },

@@ -25,7 +25,6 @@ function trace(...args: unknown[]): void {
     return;
   }
   // Keep trace independent from plugin logger to simplify action-path debugging.
-  // eslint-disable-next-line no-console
   console.log('[event-plugin:trace]', ...args);
 }
 

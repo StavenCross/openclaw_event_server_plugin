@@ -217,9 +217,7 @@ export class HookBridgeDispatchEngine {
 
     const queueAtCapacity = this.queue.length >= max;
     if (queueAtCapacity) {
-      if (!this.queueFullSinceMs) {
-        this.queueFullSinceMs = Date.now();
-      }
+      this.queueFullSinceMs ??= Date.now();
 
       if (!this.backpressureActive && Date.now() - this.queueFullSinceMs >= this.config.telemetry.saturationWindowMs) {
         this.backpressureActive = true;
