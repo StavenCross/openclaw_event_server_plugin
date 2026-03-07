@@ -2,7 +2,7 @@
 
 ## 1.1.1 - 2026-03-07
 
-Replacement release for `v1.1.0`. This version carries forward the full `1.1.0` feature release notes and adds the CI stabilization needed to produce a clean published release.
+Published release for the March 7 feature set. `1.1.0` was intentionally skipped during release testing, so `1.1.1` carries the full feature notes plus the final CI-stability adjustment used for the public release.
 
 ### Fixes
 
@@ -12,8 +12,8 @@ Replacement release for `v1.1.0`. This version carries forward the full `1.1.0` 
 
 ### Why This Release Exists
 
-- `v1.1.0` was published, but the GitHub Actions runs for both `main` and the release tag failed on Linux.
-- The failure was isolated to one integration test that passed locally on macOS but intermittently returned `undefined` on the runner.
+- `1.1.0` was used as an internal release-testing version and intentionally not kept as the public release tag.
+- During release testing we found one integration test that was too platform-sensitive for the public release flow.
 - No transport code change was required for the fix; the issue was the test's platform-sensitive setup.
 
 ### Full Release Notes
