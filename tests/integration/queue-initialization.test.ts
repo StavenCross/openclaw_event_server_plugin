@@ -3,9 +3,12 @@
  */
 
 import * as net from 'net';
-import plugin from '../../src/index';
+import { createPlugin } from '../../src/index';
 import { stopBroadcastServer } from '../../src/broadcast/websocketServer';
 import { MockOpenClawApi, MockWebhookReceiver, createMockMessageSent } from '../mocks/openclaw-runtime';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -31,8 +34,13 @@ async function reservePort(): Promise<number> {
 describe('Queue initialization', () => {
   it('should enqueue and deliver events before any gateway:startup hook', async () => {
     const port = await reservePort();
+    const tempDir = await mkdtemp(join(tmpdir(), 'event-plugin-queue-'));
+    const plugin = createPlugin();
     const api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -41,6 +49,7 @@ describe('Queue initialization', () => {
     process.env.EVENT_PLUGIN_WEBHOOKS = `http://127.0.0.1:${port}/events`;
     process.env.EVENT_PLUGIN_DISABLE_WS = 'true';
     process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER = 'true';
+    process.env.OPENCLAW_STATE_DIR = tempDir;
 
     const receiver = new MockWebhookReceiver();
 
@@ -64,9 +73,11 @@ describe('Queue initialization', () => {
       await plugin.deactivate();
       await receiver.stop();
       await stopBroadcastServer();
+      await rm(tempDir, { recursive: true, force: true });
       delete process.env.EVENT_PLUGIN_WEBHOOKS;
       delete process.env.EVENT_PLUGIN_DISABLE_WS;
       delete process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER;
+      delete process.env.OPENCLAW_STATE_DIR;
     }
   });
 });

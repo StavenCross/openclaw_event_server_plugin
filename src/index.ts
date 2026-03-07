@@ -23,6 +23,7 @@ import { ToolCallTracker } from './hooks/tool-hooks';
 import { EventFileLogger, getRuntimeLogger } from './logging';
 import { createHookBridge } from './runtime/hook-bridge';
 import { createInternalHandlers } from './runtime/internal-handlers';
+import { detectOpenClawRuntimeKind, resolveAutoTransportMode } from './runtime/runtime-kind';
 import { createRuntimeEventOps } from './runtime/runtime-events';
 import { registerTypedHooks } from './runtime/typed-hooks';
 import { OpenClawPluginApi, PendingToolCall, PluginState, RuntimeLogger } from './runtime/types';
@@ -72,6 +73,7 @@ export function createPlugin() {
     isInitialized: false,
     websocketEnabled: true,
     runtimeId: randomUUID(),
+    runtimeKind: 'unknown',
     transportRole: 'follower',
     transportManager: undefined,
     hookBridge: undefined,
@@ -128,6 +130,7 @@ export function createPlugin() {
     state.sessionTracker.clear();
     state.statusReducer.clear();
     state.subagentTracker.clear();
+    state.runtimeKind = 'unknown';
     state.transportRole = 'follower';
     if (state.transportManager) {
       void state.transportManager.stop().catch((error: unknown) => {
@@ -152,6 +155,27 @@ export function createPlugin() {
       workingWindowMs: state.config.status.workingWindowMs,
       sleepingWindowMs: state.config.status.sleepingWindowMs,
     });
+
+    state.runtimeKind = detectOpenClawRuntimeKind();
+    if (state.config.transport.mode === 'auto') {
+      state.config = {
+        ...state.config,
+        transport: {
+          ...state.config.transport,
+          mode: resolveAutoTransportMode(state.runtimeKind),
+        },
+      };
+
+      logger.info('[Transport] Resolved auto transport mode for runtime', {
+        runtimeKind: state.runtimeKind,
+        transportMode: state.config.transport.mode,
+      });
+      if (state.runtimeKind === 'unknown') {
+        logger.warn(
+          '[Transport] Could not positively identify runtime kind in auto mode; defaulting to follower transport',
+        );
+      }
+    }
 
     const validation = validateConfig(state.config);
     if (!validation.valid) {
@@ -383,6 +407,7 @@ export function createPlugin() {
     state.isInitialized = true;
     logger.info('Plugin activated successfully', {
       runtimeId: state.runtimeId,
+      runtimeKind: state.runtimeKind,
       transportRole: state.transportRole,
       transportMode: state.config.transport.mode,
     });

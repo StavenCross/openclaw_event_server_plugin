@@ -1,6 +1,8 @@
+import { mkdtemp, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import plugin from '../../src/index';
+import { tmpdir } from 'node:os';
+import { createPlugin } from '../../src/index';
 import { OpenClawEvent } from '../../src/events/types';
 import { MockOpenClawApi, MockWebhookReceiver } from '../mocks/openclaw-runtime';
 
@@ -43,8 +45,13 @@ describe('Mission Control envelope compatibility replay', () => {
   const fixture = readFixture();
 
   it('replays fixture events and preserves canonical envelope fields', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'event-plugin-replay-'));
+    const plugin = createPlugin();
     const api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -55,6 +62,7 @@ describe('Mission Control envelope compatibility replay', () => {
     process.env.EVENT_PLUGIN_WEBHOOKS = `http://127.0.0.1:${port}/events`;
     process.env.EVENT_PLUGIN_DISABLE_WS = 'true';
     process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER = 'true';
+    process.env.OPENCLAW_STATE_DIR = tempDir;
 
     try {
       plugin.activate(api);
@@ -91,9 +99,11 @@ describe('Mission Control envelope compatibility replay', () => {
     } finally {
       await plugin.deactivate();
       await receiver.stop();
+      await rm(tempDir, { recursive: true, force: true });
       delete process.env.EVENT_PLUGIN_WEBHOOKS;
       delete process.env.EVENT_PLUGIN_DISABLE_WS;
       delete process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER;
+      delete process.env.OPENCLAW_STATE_DIR;
     }
   });
 });

@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-event-server-plugin",
+  "name": "event-server-plugin",
   "version": "1.0.0",
   "description": "OpenClaw plugin for capturing and broadcasting events via webhooks",
   "main": "dist/index.js",
@@ -39,12 +39,14 @@
   },
   "homepage": "https://github.com/StavenCross/openclaw_event_server_plugin#readme",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.11.0",
+    "@types/node": "^20.19.37",
     "@types/uuid": "^10.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
     "jest": "^30.2.0",
     "ts-jest": "^29.1.2",
     "typescript": "^5.3.3"
@@ -52,7 +54,7 @@
   "dependencies": {
     "@types/ws": "^8.5.10",
     "axios": "^1.6.5",
-    "uuid": "^9.0.1",
+    "uuid": "^11.1.0",
     "ws": "^8.16.0"
   },
   "openclaw": {

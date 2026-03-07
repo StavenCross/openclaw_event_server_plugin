@@ -100,6 +100,40 @@ describe('WebSocket Broadcast Server Fallback', () => {
     }
   });
 
+  it('should retry startup after transient full port exhaustion', async () => {
+    const primaryPort = 9225;
+    const fallbackPort = 9226;
+    const blockerOne = await occupyPort(primaryPort);
+    const blockerTwo = await occupyPort(fallbackPort);
+    const server = new BroadcastWebSocketServer({
+      port: primaryPort,
+      fallbackPorts: [fallbackPort],
+      startupRetryMs: 50,
+    });
+
+    try {
+      server.start();
+      await wait(120);
+      expect(server.isServerRunning()).toBe(false);
+
+      await closeNetServer(blockerOne);
+      await closeNetServer(blockerTwo);
+
+      await waitFor(() => server.isServerRunning(), 1500);
+      expect([primaryPort, fallbackPort]).toContain(server.getPort());
+
+      const client = new WebSocket(`ws://127.0.0.1:${server.getPort()}/`);
+      await new Promise<void>((resolve, reject) => {
+        client.once('open', () => resolve());
+        client.once('error', reject);
+      });
+      client.close();
+    } finally {
+      await server.stop();
+      await wait(25);
+    }
+  });
+
   it('should reuse configured port sequence on server restart', async () => {
     const primaryPort = 9230;
     const fallbackPort = 9231;

@@ -79,7 +79,15 @@ Then start OpenClaw and connect a WebSocket client to:
 
 - `ws://127.0.0.1:9011/` (falls back across `9012-9016`)
 
-For multi-runtime hosts, use `transport.mode: "auto"` and set `transport.authToken`.
+For multi-runtime hosts, use `transport.mode: "auto"` and set `transport.authToken`. In `auto`, the gateway runtime owns transport and other OpenClaw runtimes relay their events into it.
+
+Important deployment note:
+
+- `auto` depends on the process looking like the real OpenClaw gateway runtime
+- if you launch the gateway through a wrapper with a nonstandard process title/argv, set `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=gateway`
+- if you launch background workers or agent-side helpers through wrappers, set `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=agent`
+
+This keeps ownership predictable: gateway publishes the public event stream, all other runtimes remain local event producers.
 
 ## For Developers
 

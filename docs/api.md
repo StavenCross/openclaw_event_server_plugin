@@ -108,3 +108,6 @@ Key runtime overrides:
 - WS security: `EVENT_PLUGIN_WS_BIND_ADDRESS`, `EVENT_PLUGIN_WS_REQUIRE_AUTH`, `EVENT_PLUGIN_WS_AUTH_TOKEN`, `EVENT_PLUGIN_WS_ALLOWED_ORIGINS`, `EVENT_PLUGIN_WS_ALLOWED_IPS`, `EVENT_PLUGIN_WS_PORTS`, `EVENT_PLUGIN_DISABLE_WS`
 - HMAC: `EVENT_PLUGIN_HMAC_ENABLED`, `EVENT_PLUGIN_HMAC_SECRET`, `EVENT_PLUGIN_HMAC_SECRET_FILE`, `EVENT_PLUGIN_HMAC_ALGORITHM`
 - Diagnostics: `EVENT_PLUGIN_TOOL_GUARD_TRACE`, `EVENT_PLUGIN_DISABLE_STATUS_TICKER`
+- Runtime detection override (for tests and nonstandard launch wrappers): `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=gateway|agent|unknown`
+
+If `transport.mode=auto` and the gateway process does not expose a recognizable OpenClaw gateway title/argv, set `EVENT_PLUGIN_RUNTIME_KIND_OVERRIDE=gateway`. Otherwise the plugin deliberately resolves to follower mode instead of letting an unknown runtime self-promote into the public transport hub.

@@ -9,14 +9,15 @@ import {
   createMockMessageSent,
 } from '../mocks/openclaw-runtime';
 import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
-import plugin from '../../src/index';
+import { createPlugin } from '../../src/index';
 import { OpenClawEvent } from '../../src/events/types';
 import { stopBroadcastServer } from '../../src/broadcast/websocketServer';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 describe('Plugin Hook Integration', () => {
+  let plugin: ReturnType<typeof createPlugin>;
   let api: MockOpenClawApi;
   let receiver: MockWebhookReceiver;
   let tempDir: string;
@@ -24,14 +25,38 @@ describe('Plugin Hook Integration', () => {
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const waitForEvents = async (count: number, timeoutMs = 1500): Promise<void> => {
+  const readLoggedEvents = async (): Promise<OpenClawEvent[]> => {
+    const logPath = join(tempDir, '.event-server', 'events.ndjson');
+    try {
+      const raw = await readFile(logPath, 'utf8');
+      return raw
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { kind?: string; event?: OpenClawEvent })
+        .filter((entry) => entry.kind === 'event' && entry.event !== undefined)
+        .map((entry) => entry.event as OpenClawEvent);
+    } catch {
+      return [];
+    }
+  };
+
+  const getObservedEvents = async (): Promise<OpenClawEvent[]> => {
+    const logged = await readLoggedEvents();
+    return logged.length > 0 ? logged : receiver.receivedEvents;
+  };
+
+  const waitForEvents = async (count: number, timeoutMs = 5000): Promise<void> => {
     const start = Date.now();
-    while (receiver.receivedEvents.length < count && Date.now() - start < timeoutMs) {
+    while (Date.now() - start < timeoutMs) {
+      const events = await getObservedEvents();
+      if (events.length >= count) {
+        return;
+      }
       await wait(25);
     }
-    if (receiver.receivedEvents.length < count) {
-      throw new Error(`Timed out waiting for ${count} events, got ${receiver.receivedEvents.length}`);
-    }
+    const events = await getObservedEvents();
+    throw new Error(`Timed out waiting for ${count} events, got ${events.length}`);
   };
 
   const waitForRequest = async (
@@ -48,9 +73,10 @@ describe('Plugin Hook Integration', () => {
     throw new Error('Timed out waiting for matching webhook request');
   };
 
-  const latestEventByType = (expectedType: string): OpenClawEvent => {
-    for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
-      const event = receiver.receivedEvents[index];
+  const latestEventByType = async (expectedType: string): Promise<OpenClawEvent> => {
+    const events = await getObservedEvents();
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
       if (event.type === expectedType) {
         return event;
       }
@@ -59,8 +85,12 @@ describe('Plugin Hook Integration', () => {
   };
 
   beforeEach(async () => {
+    plugin = createPlugin();
     api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -76,6 +106,7 @@ describe('Plugin Hook Integration', () => {
     process.env.EVENT_PLUGIN_WS_PORTS = `${wsBase},${wsBase + 1},${wsBase + 2}`;
     process.env.EVENT_PLUGIN_DISABLE_WS = 'true';
     process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER = 'true';
+    process.env.OPENCLAW_STATE_DIR = tempDir;
 
     plugin.activate(api);
   });
@@ -91,6 +122,7 @@ describe('Plugin Hook Integration', () => {
     delete process.env.EVENT_PLUGIN_WS_PORTS;
     delete process.env.EVENT_PLUGIN_DISABLE_WS;
     delete process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER;
+    delete process.env.OPENCLAW_STATE_DIR;
   });
 
   it('registers expected internal hooks', () => {
@@ -140,8 +172,8 @@ describe('Plugin Hook Integration', () => {
     await api.triggerHook('message:sent', createMockMessageSent());
     await waitForEvents(2);
 
-    expect(latestEventByType('message.received').eventCategory).toBe('message');
-    expect(latestEventByType('message.sent').eventCategory).toBe('message');
+    expect((await latestEventByType('message.received')).eventCategory).toBe('message');
+    expect((await latestEventByType('message.sent')).eventCategory).toBe('message');
   });
 
   it('broadcasts message.transcribed and message.preprocessed only from message hooks', async () => {
@@ -170,8 +202,8 @@ describe('Plugin Hook Integration', () => {
 
     await waitForEvents(2);
 
-    expect(latestEventByType('message.transcribed').eventName).toBe('message:transcribed');
-    expect(latestEventByType('message.preprocessed').eventName).toBe('message:preprocessed');
+    expect((await latestEventByType('message.transcribed')).eventName).toBe('message:transcribed');
+    expect((await latestEventByType('message.preprocessed')).eventName).toBe('message:preprocessed');
   });
 
   it('keeps command events as command.* (no synthetic session spawn/end reinterpretation)', async () => {
@@ -180,11 +212,12 @@ describe('Plugin Hook Integration', () => {
     await api.triggerHook('command:stop', createMockCommand('stop', { sessionKey: 'command-session-1' }));
     await waitForEvents(3);
 
-    expect(latestEventByType('command.new').eventCategory).toBe('command');
-    expect(latestEventByType('command.reset').eventCategory).toBe('command');
-    expect(latestEventByType('command.stop').eventCategory).toBe('command');
-    expect(receiver.receivedEvents.some((event) => event.type === 'session.spawned')).toBe(false);
-    expect(receiver.receivedEvents.some((event) => event.type === 'session.completed')).toBe(false);
+    const loggedEvents = await readLoggedEvents();
+    expect((await latestEventByType('command.new')).eventCategory).toBe('command');
+    expect((await latestEventByType('command.reset')).eventCategory).toBe('command');
+    expect((await latestEventByType('command.stop')).eventCategory).toBe('command');
+    expect(loggedEvents.some((event) => event.type === 'session.spawned')).toBe(false);
+    expect(loggedEvents.some((event) => event.type === 'session.completed')).toBe(false);
   });
 
   it('broadcasts tool lifecycle and tool_result_persist from plugin hooks', async () => {
@@ -205,18 +238,21 @@ describe('Plugin Hook Integration', () => {
     );
     await waitForEvents(7);
 
-    expect(latestEventByType('tool.called').eventCategory).toBe('tool');
-    expect(latestEventByType('tool.completed').eventCategory).toBe('tool');
-    expect(latestEventByType('tool.result_persist').eventCategory).toBe('tool');
-    expect(latestEventByType('tool.called').eventName).toBe('before_tool_call');
-    expect(latestEventByType('tool.completed').eventName).toBe('after_tool_call');
-    expect(latestEventByType('tool.result_persist').eventName).toBe('tool_result_persist');
+    expect((await latestEventByType('tool.called')).eventCategory).toBe('tool');
+    expect((await latestEventByType('tool.completed')).eventCategory).toBe('tool');
+    expect((await latestEventByType('tool.result_persist')).eventCategory).toBe('tool');
+    expect((await latestEventByType('tool.called')).eventName).toBe('before_tool_call');
+    expect((await latestEventByType('tool.completed')).eventName).toBe('after_tool_call');
+    expect((await latestEventByType('tool.result_persist')).eventName).toBe('tool_result_persist');
   });
 
   it('dispatches hook bridge webhook action for matching tool.called event', async () => {
     await plugin.deactivate();
 
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },

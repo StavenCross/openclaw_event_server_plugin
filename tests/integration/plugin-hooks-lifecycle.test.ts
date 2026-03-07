@@ -7,14 +7,15 @@ import {
   createMockGatewayStartup,
 } from '../mocks/openclaw-runtime';
 import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
-import plugin from '../../src/index';
+import { createPlugin } from '../../src/index';
 import { OpenClawEvent } from '../../src/events/types';
 import { stopBroadcastServer } from '../../src/broadcast/websocketServer';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 describe('Plugin Hook Integration', () => {
+  let plugin: ReturnType<typeof createPlugin>;
   let api: MockOpenClawApi;
   let receiver: MockWebhookReceiver;
   let tempDir: string;
@@ -22,19 +23,44 @@ describe('Plugin Hook Integration', () => {
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const waitForEvents = async (count: number, timeoutMs = 1500): Promise<void> => {
-    const start = Date.now();
-    while (receiver.receivedEvents.length < count && Date.now() - start < timeoutMs) {
-      await wait(25);
-    }
-    if (receiver.receivedEvents.length < count) {
-      throw new Error(`Timed out waiting for ${count} events, got ${receiver.receivedEvents.length}`);
+  const readLoggedEvents = async (): Promise<OpenClawEvent[]> => {
+    const logPath = join(tempDir, '.event-server', 'events.ndjson');
+    try {
+      const raw = await readFile(logPath, 'utf8');
+      return raw
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { kind?: string; event?: OpenClawEvent })
+        .filter((entry) => entry.kind === 'event' && entry.event !== undefined)
+        .map((entry) => entry.event as OpenClawEvent);
+    } catch {
+      return [];
     }
   };
 
-  const latestEventByType = (expectedType: string): OpenClawEvent => {
-    for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
-      const event = receiver.receivedEvents[index];
+  const getObservedEvents = async (): Promise<OpenClawEvent[]> => {
+    const logged = await readLoggedEvents();
+    return logged.length > 0 ? logged : receiver.receivedEvents;
+  };
+
+  const waitForEvents = async (count: number, timeoutMs = 5000): Promise<void> => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const events = await getObservedEvents();
+      if (events.length >= count) {
+        return;
+      }
+      await wait(25);
+    }
+    const events = await getObservedEvents();
+    throw new Error(`Timed out waiting for ${count} events, got ${events.length}`);
+  };
+
+  const latestEventByType = async (expectedType: string): Promise<OpenClawEvent> => {
+    const events = await getObservedEvents();
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
       if (event.type === expectedType) {
         return event;
       }
@@ -43,8 +69,12 @@ describe('Plugin Hook Integration', () => {
   };
 
   beforeEach(async () => {
+    plugin = createPlugin();
     api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -60,6 +90,7 @@ describe('Plugin Hook Integration', () => {
     process.env.EVENT_PLUGIN_WS_PORTS = `${wsBase},${wsBase + 1},${wsBase + 2}`;
     process.env.EVENT_PLUGIN_DISABLE_WS = 'true';
     process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER = 'true';
+    process.env.OPENCLAW_STATE_DIR = tempDir;
 
     plugin.activate(api);
   });
@@ -75,6 +106,7 @@ describe('Plugin Hook Integration', () => {
     delete process.env.EVENT_PLUGIN_WS_PORTS;
     delete process.env.EVENT_PLUGIN_DISABLE_WS;
     delete process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER;
+    delete process.env.OPENCLAW_STATE_DIR;
   });
 
   it('broadcasts session.start and session.end from plugin session hooks', async () => {
@@ -90,8 +122,8 @@ describe('Plugin Hook Integration', () => {
     );
     await waitForEvents(4);
 
-    const start = latestEventByType('session.start');
-    const end = latestEventByType('session.end');
+    const start = await latestEventByType('session.start');
+    const end = await latestEventByType('session.end');
     expect(start.data.sessionId).toBe('session-100');
     expect(end.data.sessionId).toBe('session-100');
     expect(start.eventName).toBe('session_start');
@@ -144,10 +176,10 @@ describe('Plugin Hook Integration', () => {
 
     await waitForEvents(7);
 
-    expect(latestEventByType('subagent.spawning').eventCategory).toBe('subagent');
-    expect(latestEventByType('subagent.spawned').eventCategory).toBe('subagent');
-    expect(latestEventByType('subagent.ended').eventCategory).toBe('subagent');
-    expect(latestEventByType('agent.sub_agent_spawn').eventCategory).toBe('synthetic');
+    expect((await latestEventByType('subagent.spawning')).eventCategory).toBe('subagent');
+    expect((await latestEventByType('subagent.spawned')).eventCategory).toBe('subagent');
+    expect((await latestEventByType('subagent.ended')).eventCategory).toBe('subagent');
+    expect((await latestEventByType('agent.sub_agent_spawn')).eventCategory).toBe('synthetic');
   });
 
   it('broadcasts gateway startup/start/stop events', async () => {
@@ -156,9 +188,9 @@ describe('Plugin Hook Integration', () => {
     await api.triggerHook('gateway:startup', createMockGatewayStartup());
     await waitForEvents(3);
 
-    expect(latestEventByType('gateway.startup').eventName).toBe('gateway:startup');
-    expect(latestEventByType('gateway.start').eventName).toBe('gateway_start');
-    expect(latestEventByType('gateway.stop').eventName).toBe('gateway_stop');
+    expect((await latestEventByType('gateway.startup')).eventName).toBe('gateway:startup');
+    expect((await latestEventByType('gateway.start')).eventName).toBe('gateway_start');
+    expect((await latestEventByType('gateway.stop')).eventName).toBe('gateway_stop');
   });
 
   it('broadcasts internal agent lifecycle/error hooks and emits status transitions', async () => {
@@ -180,11 +212,11 @@ describe('Plugin Hook Integration', () => {
     });
     await waitForEvents(8);
 
-    expect(latestEventByType('agent.bootstrap').eventName).toBe('agent:bootstrap');
-    expect(latestEventByType('agent.session_start').eventName).toBe('agent:session:start');
-    expect(latestEventByType('agent.session_end').eventName).toBe('agent:session:end');
-    expect(latestEventByType('agent.error').eventCategory).toBe('agent');
-    expect(latestEventByType('agent.status').data.status).toBe('offline');
+    expect((await latestEventByType('agent.bootstrap')).eventName).toBe('agent:bootstrap');
+    expect((await latestEventByType('agent.session_start')).eventName).toBe('agent:session:start');
+    expect((await latestEventByType('agent.session_end')).eventName).toBe('agent:session:end');
+    expect((await latestEventByType('agent.error')).eventCategory).toBe('agent');
+    expect((await latestEventByType('agent.status')).data.status).toBe('offline');
   });
 
   it('emits synthetic agent.status events from reducer transitions', async () => {
@@ -196,7 +228,7 @@ describe('Plugin Hook Integration', () => {
 
     await waitForEvents(3);
 
-    const statusEvent = latestEventByType('agent.status');
+    const statusEvent = await latestEventByType('agent.status');
     expect(statusEvent.agentId).toBe('sloan');
     expect(statusEvent.data.status).toBe('working');
   });

@@ -7,9 +7,7 @@ import { OpenClawEvent, WebhookConfig, RetryConfig } from '../events/types';
 let axiosImport: Promise<typeof import('axios')> | null = null;
 
 function getAxios() {
-  if (!axiosImport) {
-    axiosImport = import('axios');
-  }
+  axiosImport ??= import('axios');
   return axiosImport;
 }
 

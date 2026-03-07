@@ -21,7 +21,7 @@ export const CONFIG_SCHEMA = {
         mode: {
           type: 'string',
           enum: ['auto', 'owner', 'follower'],
-          description: 'Select automatic owner election or force owner/follower transport behavior',
+          description: 'Use gateway-owned auto transport or force explicit owner/follower behavior',
           default: DEFAULT_CONFIG.transport.mode,
         },
         lockPath: {

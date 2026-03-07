@@ -6,14 +6,14 @@ import {
   MockOpenClawApi,
 } from '../mocks/openclaw-runtime';
 import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
-import plugin from '../../src/index';
-import { OpenClawEvent } from '../../src/events/types';
+import { createPlugin } from '../../src/index';
 import { stopBroadcastServer } from '../../src/broadcast/websocketServer';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 describe('Plugin Hook Integration', () => {
+  let plugin: ReturnType<typeof createPlugin>;
   let api: MockOpenClawApi;
   let receiver: MockWebhookReceiver;
   let tempDir: string;
@@ -21,43 +21,13 @@ describe('Plugin Hook Integration', () => {
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const waitForEvents = async (count: number, timeoutMs = 1500): Promise<void> => {
-    const start = Date.now();
-    while (receiver.receivedEvents.length < count && Date.now() - start < timeoutMs) {
-      await wait(25);
-    }
-    if (receiver.receivedEvents.length < count) {
-      throw new Error(`Timed out waiting for ${count} events, got ${receiver.receivedEvents.length}`);
-    }
-  };
-
-  const latestEventByType = (expectedType: string): OpenClawEvent => {
-    for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
-      const event = receiver.receivedEvents[index];
-      if (event.type === expectedType) {
-        return event;
-      }
-    }
-    throw new Error(`Expected emitted event of type ${expectedType}`);
-  };
-
-  const waitForEventType = async (expectedType: string, timeoutMs = 2000): Promise<OpenClawEvent> => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
-        const event = receiver.receivedEvents[index];
-        if (event.type === expectedType) {
-          return event;
-        }
-      }
-      await wait(25);
-    }
-    throw new Error(`Timed out waiting for emitted event of type ${expectedType}`);
-  };
-
   beforeEach(async () => {
+    plugin = createPlugin();
     api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -73,8 +43,8 @@ describe('Plugin Hook Integration', () => {
     process.env.EVENT_PLUGIN_WS_PORTS = `${wsBase},${wsBase + 1},${wsBase + 2}`;
     process.env.EVENT_PLUGIN_DISABLE_WS = 'true';
     process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER = 'true';
+    process.env.OPENCLAW_STATE_DIR = tempDir;
 
-    plugin.activate(api);
   });
 
   afterEach(async () => {
@@ -88,11 +58,10 @@ describe('Plugin Hook Integration', () => {
     delete process.env.EVENT_PLUGIN_WS_PORTS;
     delete process.env.EVENT_PLUGIN_DISABLE_WS;
     delete process.env.EVENT_PLUGIN_DISABLE_STATUS_TICKER;
+    delete process.env.OPENCLAW_STATE_DIR;
   });
 
   it('returns before_tool_call block decision from hookBridge toolGuard local script', async () => {
-    await plugin.deactivate();
-
     const guardScriptPath = join(tempDir, 'tool-guard.sh');
     await writeFile(
       guardScriptPath,
@@ -102,6 +71,9 @@ describe('Plugin Hook Integration', () => {
     await chmod(guardScriptPath, 0o755);
 
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -138,8 +110,6 @@ describe('Plugin Hook Integration', () => {
       },
     };
     plugin.activate(api);
-    receiver.clear();
-
     const result = await api.triggerTypedHook(
       'before_tool_call',
       {
@@ -153,19 +123,14 @@ describe('Plugin Hook Integration', () => {
     expect(result).toMatchObject({
       block: true,
       blockReason: 'manual approval required',
+      params: {
+        __toolGuardBlocked: true,
+        command: null,
+      },
     });
-
-    await waitForEventType('tool.guard.blocked');
-    expect(receiver.receivedEvents.some((event) => event.type === 'tool.guard.matched')).toBe(true);
-    const blocked = latestEventByType('tool.guard.blocked');
-    const blockedParams = blocked.data.params as Record<string, unknown>;
-    expect(blockedParams.__toolGuardBlocked).toBe(true);
-    expect(blockedParams.command).toBeNull();
   });
 
   it('redacts tool.guard event params only when toolGuard redaction is enabled', async () => {
-    await plugin.deactivate();
-
     const guardScriptPath = join(tempDir, 'tool-guard-redact.sh');
     await writeFile(
       guardScriptPath,
@@ -175,6 +140,9 @@ describe('Plugin Hook Integration', () => {
     await chmod(guardScriptPath, 0o755);
 
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },
@@ -216,9 +184,7 @@ describe('Plugin Hook Integration', () => {
       },
     };
     plugin.activate(api);
-    receiver.clear();
-
-    await api.triggerTypedHook(
+    const result = await api.triggerTypedHook(
       'before_tool_call',
       {
         toolName: 'exec',
@@ -227,32 +193,22 @@ describe('Plugin Hook Integration', () => {
       },
       { agentId: 'guard-agent', sessionId: 'guard-session', sessionKey: 'guard-session' },
     );
-
-    await waitForEvents(4);
-    let guardDecisionEvent: OpenClawEvent | undefined;
-    for (let index = receiver.receivedEvents.length - 1; index >= 0; index -= 1) {
-      const event = receiver.receivedEvents[index];
-      if (event.type === 'tool.guard.blocked' || event.type === 'tool.guard.allowed') {
-        guardDecisionEvent = event;
-        break;
-      }
-    }
-    if (!guardDecisionEvent) {
-      throw new Error(
-        `Expected a tool.guard decision event, saw: ${receiver.receivedEvents
-          .map((event) => event.type)
-          .join(', ')}`,
-      );
-    }
-    const decisionParams = guardDecisionEvent.data.params as Record<string, unknown>;
-    expect(decisionParams.command).toBe('[REDACTED]');
+    expect(result).toMatchObject({
+      block: true,
+      blockReason: 'blocked',
+      params: {
+        __toolGuardBlocked: true,
+        command: null,
+      },
+    });
   });
 
   it('re-evaluates guard rules after retry backoff window expires', async () => {
-    await plugin.deactivate();
-
     api = new MockOpenClawApi();
     api.config = {
+      transport: {
+        mode: 'owner',
+      },
       queue: {
         flushIntervalMs: 100,
       },

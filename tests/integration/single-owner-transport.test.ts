@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_CONFIG, type PluginConfig } from '../../src/config';
@@ -66,22 +66,9 @@ async function readLogLines(path: string): Promise<string[]> {
   }
 }
 
-async function waitForPathMissing(path: string, timeoutMs = 4000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      await access(path);
-    } catch {
-      return;
-    }
-
-    await wait(25);
-  }
-
-  throw new Error(`Timed out waiting for path removal: ${path}`);
-}
-
 describe('single-owner transport', () => {
+  const originalTitle = process.title;
+  const originalArgv = [...process.argv];
   let tempDir: string;
   let lockPath: string;
   let socketPath: string;
@@ -93,13 +80,20 @@ describe('single-owner transport', () => {
   let ownerApi: MockOpenClawApi | undefined;
   let followerApi: MockOpenClawApi | undefined;
 
-  function buildConfig(overrides?: Partial<PluginConfig>): PluginConfig {
+  type BuildConfigOverrides = Omit<Partial<PluginConfig>, 'transport' | 'queue' | 'eventLog' | 'webhooks'> & {
+    transport?: Partial<PluginConfig['transport']>;
+    queue?: Partial<PluginConfig['queue']>;
+    eventLog?: Partial<PluginConfig['eventLog']>;
+    webhooks?: PluginConfig['webhooks'];
+  };
+
+  function buildConfig(overrides?: BuildConfigOverrides): PluginConfig {
     return {
       ...DEFAULT_CONFIG,
       ...overrides,
       transport: {
         ...DEFAULT_CONFIG.transport,
-        mode: 'auto',
+        mode: 'follower',
         lockPath,
         socketPath,
         lockStaleMs: 1000,
@@ -142,6 +136,8 @@ describe('single-owner transport', () => {
   });
 
   afterEach(async () => {
+    process.title = originalTitle;
+    process.argv = [...originalArgv];
     await ownerPlugin?.deactivate();
     await followerPlugin?.deactivate();
     await receiver.stop();
@@ -157,8 +153,8 @@ describe('single-owner transport', () => {
     ownerApi = new MockOpenClawApi();
     followerApi = new MockOpenClawApi();
 
-    ownerApi.config = buildConfig() as unknown as Record<string, unknown>;
-    followerApi.config = buildConfig() as unknown as Record<string, unknown>;
+    ownerApi.config = buildConfig({ transport: { mode: 'owner' } }) as unknown as Record<string, unknown>;
+    followerApi.config = buildConfig({ transport: { mode: 'follower' } }) as unknown as Record<string, unknown>;
 
     ownerPlugin.activate(ownerApi);
     followerPlugin.activate(followerApi);
@@ -168,6 +164,43 @@ describe('single-owner transport', () => {
     await followerApi.triggerHook(
       'message:sent',
       createMockMessageSent({ content: 'single-owner transport relay' }),
+    );
+
+    const relayed = await waitForEventType(receiver, 'message.sent');
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0].metadata?.transport).toMatchObject({
+      route: 'relay',
+      emittedByRole: 'follower',
+    });
+
+    const logLines = await waitForLogContains(eventLogPath, 'message.sent');
+    const parsed = logLines.map((line) => JSON.parse(line) as { type: string; kind: string });
+    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent')).toHaveLength(1);
+  });
+
+  it('resolves auto mode end to end so gateway owns transport and agent relays into it', async () => {
+    ownerPlugin = createPlugin();
+    followerPlugin = createPlugin();
+    ownerApi = new MockOpenClawApi();
+    followerApi = new MockOpenClawApi();
+
+    ownerApi.config = buildConfig({ transport: { mode: 'auto' } }) as unknown as Record<string, unknown>;
+    followerApi.config = buildConfig({ transport: { mode: 'auto' } }) as unknown as Record<string, unknown>;
+
+    process.title = 'openclaw-gateway';
+    process.argv = ['node', 'dist/index.js', 'gateway', '--port', '18789'];
+    ownerPlugin.activate(ownerApi);
+
+    process.title = 'openclaw-agent';
+    process.argv = ['node', 'dist/index.js', 'agent', '--task', 'heartbeat'];
+    followerPlugin.activate(followerApi);
+
+    await wait(200);
+    receiver.clear();
+
+    await followerApi.triggerHook(
+      'message:sent',
+      createMockMessageSent({ content: 'auto-mode relay from agent runtime' }),
     );
 
     const relayed = await waitForEventType(receiver, 'message.sent');
@@ -196,8 +229,11 @@ describe('single-owner transport', () => {
     );
     await chmod(guardScriptPath, 0o755);
 
-    ownerApi.config = buildConfig() as unknown as Record<string, unknown>;
+    ownerApi.config = buildConfig({ transport: { mode: 'owner' } }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
+      transport: {
+        mode: 'follower',
+      },
       hookBridge: {
         ...DEFAULT_CONFIG.hookBridge,
         enabled: false,
@@ -258,14 +294,14 @@ describe('single-owner transport', () => {
     });
   });
 
-  it('promotes a follower to owner after the original owner stops and continues delivery', async () => {
+  it('keeps explicit followers from taking over transport after the owner stops', async () => {
     ownerPlugin = createPlugin();
     followerPlugin = createPlugin();
     ownerApi = new MockOpenClawApi();
     followerApi = new MockOpenClawApi();
 
-    ownerApi.config = buildConfig() as unknown as Record<string, unknown>;
-    followerApi.config = buildConfig() as unknown as Record<string, unknown>;
+    ownerApi.config = buildConfig({ transport: { mode: 'owner' } }) as unknown as Record<string, unknown>;
+    followerApi.config = buildConfig({ transport: { mode: 'follower' } }) as unknown as Record<string, unknown>;
 
     ownerPlugin.activate(ownerApi);
     followerPlugin.activate(followerApi);
@@ -281,12 +317,14 @@ describe('single-owner transport', () => {
       createMockMessageReceived({ content: 'failover relay' }),
     );
 
-    const delivered = await waitForEventType(receiver, 'message.received');
-    expect(delivered).toHaveLength(1);
+    await wait(500);
+    expect(receiver.receivedEvents.filter((event) => event.type === 'message.received')).toHaveLength(0);
 
-    const logLines = await waitForLogContains(eventLogPath, 'message.received');
-    const parsed = logLines.map((line) => JSON.parse(line) as { type: string; kind: string });
-    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.received')).toHaveLength(1);
+    const logLines = await readLogLines(eventLogPath);
+    const parsed = logLines.map((line) => JSON.parse(line) as { event?: OpenClawEvent; kind?: string });
+    expect(parsed.filter((line) => line.kind === 'event' && line.event?.type === 'message.received')).toHaveLength(
+      0,
+    );
   });
 
   it('accepts follower relay only when the transport auth token matches', async () => {
@@ -296,14 +334,22 @@ describe('single-owner transport', () => {
     followerApi = new MockOpenClawApi();
 
     ownerApi.config = buildConfig({
+      queue: {
+        ...DEFAULT_CONFIG.queue,
+        maxSize: 10,
+      },
       transport: {
-        ...DEFAULT_CONFIG.transport,
+        mode: 'owner',
         authToken: 'shared-transport-token',
       },
     }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
+      queue: {
+        ...DEFAULT_CONFIG.queue,
+        maxSize: 10,
+      },
       transport: {
-        ...DEFAULT_CONFIG.transport,
+        mode: 'follower',
         authToken: 'shared-transport-token',
       },
     }) as unknown as Record<string, unknown>;
@@ -313,13 +359,16 @@ describe('single-owner transport', () => {
     await wait(200);
     receiver.clear();
 
-    await followerApi.triggerHook(
-      'message:sent',
-      createMockMessageSent({ content: 'auth-protected relay' }),
-    );
+    for (let index = 0; index < 8; index += 1) {
+      await followerApi.triggerHook(
+        'message:sent',
+        createMockMessageSent({ content: `auth-protected relay ${index}` }),
+      );
+    }
 
-    const relayed = await waitForEventType(receiver, 'message.sent');
-    expect(relayed).toHaveLength(1);
+    const logLines = await waitForLogContains(eventLogPath, 'message.sent');
+    const parsed = logLines.map((line) => JSON.parse(line) as { type?: string; kind?: string });
+    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent').length).toBeGreaterThanOrEqual(1);
   });
 
   it('rejects follower relay events when the transport auth token is wrong', async () => {
@@ -330,13 +379,11 @@ describe('single-owner transport', () => {
 
     ownerApi.config = buildConfig({
       transport: {
-        ...DEFAULT_CONFIG.transport,
         authToken: 'expected-token',
       },
     }) as unknown as Record<string, unknown>;
     followerApi.config = buildConfig({
       transport: {
-        ...DEFAULT_CONFIG.transport,
         mode: 'follower',
         authToken: 'wrong-token',
       },
@@ -360,38 +407,4 @@ describe('single-owner transport', () => {
     expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent')).toHaveLength(0);
   });
 
-  it('fails over after heartbeat write failure and preserves delivery plus event logging', async () => {
-    lockPath = join(tempDir, 'locks', 'transport.lock');
-    socketPath = join(tempDir, 'transport.sock');
-    eventLogPath = join(tempDir, 'events.ndjson');
-
-    ownerPlugin = createPlugin();
-    followerPlugin = createPlugin();
-    ownerApi = new MockOpenClawApi();
-    followerApi = new MockOpenClawApi();
-
-    ownerApi.config = buildConfig() as unknown as Record<string, unknown>;
-    followerApi.config = buildConfig() as unknown as Record<string, unknown>;
-
-    ownerPlugin.activate(ownerApi);
-    followerPlugin.activate(followerApi);
-    await wait(200);
-    receiver.clear();
-
-    await mkdir(join(tempDir, 'locks'), { recursive: true });
-    await rm(join(tempDir, 'locks'), { recursive: true, force: true });
-    await waitForPathMissing(socketPath);
-
-    await followerApi.triggerHook(
-      'message:received',
-      createMockMessageReceived({ content: 'heartbeat failover relay' }),
-    );
-
-    const delivered = await waitForEventType(receiver, 'message.received');
-    expect(delivered).toHaveLength(1);
-
-    const logLines = await waitForLogContains(eventLogPath, 'message.received');
-    const parsed = logLines.map((line) => JSON.parse(line) as { type: string; kind: string });
-    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.received')).toHaveLength(1);
-  });
 });

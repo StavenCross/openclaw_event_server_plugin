@@ -49,6 +49,7 @@ function createState(): PluginState {
     isInitialized: false,
     websocketEnabled: true,
     runtimeId: 'runtime-test',
+    runtimeKind: 'gateway',
     transportRole: 'owner',
     transportManager: undefined,
     hookBridge: undefined,

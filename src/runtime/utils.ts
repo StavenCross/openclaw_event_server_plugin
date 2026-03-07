@@ -7,6 +7,7 @@ import {
   RuntimeLogger,
   ToolHookEvent,
 } from './types';
+import { toStableToken } from './hook-bridge-utils';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -102,7 +103,7 @@ export function normalizeError(error: unknown): EventError {
 
   if (isRecord(error)) {
     return {
-      message: readString(error.message) ?? String(error),
+      message: readString(error.message) ?? toStableToken(error, 'Unknown error'),
       stack: readString(error.stack),
       code: readString(error.code),
       kind: 'unknown',
@@ -110,7 +111,7 @@ export function normalizeError(error: unknown): EventError {
   }
 
   return {
-    message: String(error),
+    message: toStableToken(error, 'Unknown error'),
     kind: 'unknown',
   };
 }

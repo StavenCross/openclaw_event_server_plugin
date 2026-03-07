@@ -1,6 +1,12 @@
 import { HookBridgeGuardDecision, HookBridgeRule, HookBridgeToolGuardRule } from '../config';
 import { OpenClawEvent } from '../events/types';
-import { matchesDomainList, matchesScalarOrList, readPath, stableJsonStringify } from './hook-bridge-utils';
+import {
+  matchesDomainList,
+  matchesScalarOrList,
+  readPath,
+  stableJsonStringify,
+  toStableToken,
+} from './hook-bridge-utils';
 
 export function buildToolGuardEvent(params: {
   toolName: string;
@@ -250,7 +256,7 @@ export function renderGuardTemplate(template: string, event: OpenClawEvent): str
     if (token.startsWith(pathPrefix)) {
       const path = token.slice(pathPrefix.length).trim();
       const value = readPath(event, path);
-      return value === undefined || value === null ? '' : String(value);
+      return toStableToken(value);
     }
 
     return '';

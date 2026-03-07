@@ -16,6 +16,7 @@ interface WebSocketServerOptions {
   host?: string;
   path?: string;
   fallbackPorts?: number[];
+  startupRetryMs?: number;
   requireAuth?: boolean;
   authToken?: string;
   allowedOrigins?: string[];
@@ -47,11 +48,13 @@ export class BroadcastWebSocketServer {
   private host: string;
   private path: string;
   private readonly configuredPorts: number[];
+  private readonly startupRetryMs: number;
   private readonly requireAuth: boolean;
   private readonly authToken?: string;
   private readonly allowedOrigins: Set<string>;
   private readonly allowedIps: Set<string>;
   private candidatePorts: number[] = [];
+  private startupRetryTimer: NodeJS.Timeout | null = null;
   private clients: Set<WebSocket> = new Set();
   private isRunning: boolean = false;
   private startupGeneration = 0;
@@ -60,6 +63,7 @@ export class BroadcastWebSocketServer {
     this.port = options.port ?? DEFAULT_PORT;
     this.host = options.host ?? '127.0.0.1';
     this.path = options.path ?? '/';
+    this.startupRetryMs = options.startupRetryMs ?? 1000;
     this.requireAuth = options.requireAuth ?? false;
     this.authToken = options.authToken;
     this.allowedOrigins = new Set(options.allowedOrigins ?? []);
@@ -84,6 +88,7 @@ export class BroadcastWebSocketServer {
       return;
     }
 
+    this.clearRetryTimer();
     this.candidatePorts = [...this.configuredPorts];
     this.startupGeneration += 1;
     this.tryStartNextPort(this.startupGeneration);
@@ -97,8 +102,11 @@ export class BroadcastWebSocketServer {
 
     const nextPort = this.candidatePorts.shift();
     if (nextPort === undefined) {
-      logger.error('[WebSocketServer] No available ports left for startup');
+      logger.error(
+        `[WebSocketServer] No available ports left for startup, retrying in ${this.startupRetryMs}ms`,
+      );
       this.isRunning = false;
+      this.scheduleRetry(generation);
       return;
     }
 
@@ -265,12 +273,14 @@ export class BroadcastWebSocketServer {
     const logger = getRuntimeLogger();
     return new Promise((resolve) => {
       if (!this.wss) {
+        this.clearRetryTimer();
         resolve();
         return;
       }
 
       const server = this.wss;
       this.startupGeneration += 1;
+      this.clearRetryTimer();
       this.wss = null;
       logger.info('[WebSocketServer] Stopping server...');
 
@@ -378,6 +388,31 @@ export class BroadcastWebSocketServer {
       return undefined;
     }
   }
+
+  private scheduleRetry(generation: number): void {
+    if (generation !== this.startupGeneration || this.startupRetryTimer) {
+      return;
+    }
+
+    this.startupRetryTimer = setTimeout(() => {
+      this.startupRetryTimer = null;
+      if (generation !== this.startupGeneration || this.wss || this.isRunning) {
+        return;
+      }
+
+      this.candidatePorts = [...this.configuredPorts];
+      this.tryStartNextPort(generation);
+    }, this.startupRetryMs);
+  }
+
+  private clearRetryTimer(): void {
+    if (!this.startupRetryTimer) {
+      return;
+    }
+
+    clearTimeout(this.startupRetryTimer);
+    this.startupRetryTimer = null;
+  }
 }
 
 function readEventType(payload: Record<string, unknown>): string {
@@ -391,9 +426,7 @@ let broadcastServer: BroadcastWebSocketServer | null = null;
  * Get or create the broadcast server instance
  */
 export function getBroadcastServer(options?: WebSocketServerOptions): BroadcastWebSocketServer {
-  if (!broadcastServer) {
-    broadcastServer = new BroadcastWebSocketServer(options);
-  }
+  broadcastServer ??= new BroadcastWebSocketServer(options);
   return broadcastServer;
 }
 
