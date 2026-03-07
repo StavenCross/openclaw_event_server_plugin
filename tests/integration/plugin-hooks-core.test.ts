@@ -5,7 +5,6 @@
 import {
   MockOpenClawApi,
   createMockCommand,
-  createMockGatewayStartup,
   createMockMessageReceived,
   createMockMessageSent,
 } from '../mocks/openclaw-runtime';
@@ -13,7 +12,7 @@ import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
 import plugin from '../../src/index';
 import { OpenClawEvent } from '../../src/events/types';
 import { stopBroadcastServer } from '../../src/broadcast/websocketServer';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

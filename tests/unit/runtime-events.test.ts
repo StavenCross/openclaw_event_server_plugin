@@ -44,9 +44,13 @@ function createState(): PluginState {
     statusReducer: new AgentStatusReducer(),
     subagentTracker: new SubagentTracker(),
     eventFileLogger: undefined,
+    eventFileLoggerReady: undefined,
     statusTimer: undefined,
     isInitialized: false,
     websocketEnabled: true,
+    runtimeId: 'runtime-test',
+    transportRole: 'owner',
+    transportManager: undefined,
     hookBridge: undefined,
   };
 }

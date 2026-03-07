@@ -7,6 +7,7 @@ import { ToolCallTracker } from '../hooks/tool-hooks';
 import { OpenClawEvent } from '../events/types';
 import { HookBridgeGuardDecision } from '../config';
 import { EventFileLogger } from '../logging';
+import type { TransportManager, TransportRole } from '../transport/manager';
 
 export interface HookRegistrationOptions {
   name: string;
@@ -71,9 +72,13 @@ export interface PluginState {
   statusReducer: AgentStatusReducer;
   subagentTracker: SubagentTracker;
   eventFileLogger?: EventFileLogger;
+  eventFileLoggerReady?: Promise<void>;
   statusTimer?: NodeJS.Timeout;
   isInitialized: boolean;
   websocketEnabled: boolean;
+  runtimeId: string;
+  transportRole: TransportRole;
+  transportManager?: TransportManager;
   hookBridge?: HookBridgeRunner;
 }
 

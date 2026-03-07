@@ -1,28 +1,14 @@
-import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_CONFIG } from '../../src/config';
-import { OpenClawEvent } from '../../src/events/types';
 import { HookBridge } from '../../src/runtime/hook-bridge';
 import { RuntimeLogger } from '../../src/runtime/types';
 import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
 
-function createEvent(type: OpenClawEvent['type'], overrides?: Partial<OpenClawEvent>): OpenClawEvent {
-  return {
-    eventId: `event-${Math.random()}`,
-    schemaVersion: '1.1.0',
-    type,
-    timestamp: new Date().toISOString(),
-    pluginVersion: '1.0.0',
-    data: {},
-    ...overrides,
-  };
-}
-
 describe('HookBridge', () => {
   let receiver: MockWebhookReceiver;
   let tempDir: string;
-  let receiverPort: number;
 
   const logger: RuntimeLogger = {
     debug: jest.fn(),
@@ -32,11 +18,9 @@ describe('HookBridge', () => {
     queue: jest.fn(),
   };
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
   beforeEach(async () => {
     receiver = new MockWebhookReceiver();
-    receiverPort = await receiver.start(0);
+    await receiver.start(0);
     tempDir = await mkdtemp(join(tmpdir(), 'hook-bridge-test-'));
     jest.clearAllMocks();
   });

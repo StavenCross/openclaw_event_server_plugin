@@ -3,6 +3,8 @@ import { EventFilter, QueueConfig, RetryConfig, WebhookConfig } from '../events/
 export interface PluginConfig {
   /** Enable/disable the plugin */
   enabled: boolean;
+  /** Transport coordination/runtime ownership configuration */
+  transport: TransportConfig;
   /** Webhook endpoints to broadcast to */
   webhooks: WebhookConfig[];
   /** Event filtering configuration */
@@ -27,6 +29,33 @@ export interface PluginConfig {
   webhookTimeoutMs: number;
   /** Optional event-driven automation bridge */
   hookBridge: HookBridgeConfig;
+}
+
+export interface TransportConfig {
+  /** Transport behavior mode */
+  mode: 'auto' | 'owner' | 'follower';
+  /** Path to the cross-process owner lock file */
+  lockPath: string;
+  /** Path to the local IPC socket/pipe used for event relay */
+  socketPath: string;
+  /** Milliseconds before an owner lock is treated as stale */
+  lockStaleMs: number;
+  /** Milliseconds between owner heartbeat lock updates */
+  heartbeatMs: number;
+  /** Timeout for follower relay attempts to owner */
+  relayTimeoutMs: number;
+  /** Backoff between follower relay reconnect attempts */
+  reconnectBackoffMs: number;
+  /** Max follower-side pending canonical events waiting for owner */
+  maxPendingEvents: number;
+  /** Maximum IPC payload size in bytes */
+  maxPayloadBytes: number;
+  /** Optional auth token required for follower relay messages */
+  authToken?: string;
+  /** TTL for owner-side relay dedupe windows */
+  dedupeTtlMs: number;
+  /** Enable semantic dedupe in addition to eventId dedupe */
+  semanticDedupeEnabled: boolean;
 }
 
 export interface HookBridgeConfig {

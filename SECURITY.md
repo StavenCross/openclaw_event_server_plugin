@@ -1,20 +1,26 @@
 # Security Policy
 
-## Supported versions
+## Supported Versions
 
 Security fixes are applied to the latest released version.
 
-## Reporting a vulnerability
+## Reporting A Vulnerability
 
-Please do not open public issues for suspected security vulnerabilities.
+Do not open public issues for suspected vulnerabilities.
 
-Report privately by emailing: security@example.com
+Report privately by emailing: `security@example.com`
 
 Include:
 
-- A clear description of the issue
-- Reproduction steps or proof of concept
-- Impact assessment
-- Suggested remediation (if available)
+- clear issue description
+- reproduction steps or proof of concept
+- impact assessment
+- suggested remediation (if available)
 
-You will receive an acknowledgment within 3 business days.
+Acknowledgment target: within 3 business days.
+
+## Security Hardening Docs
+
+Implementation and operational hardening guidance is documented in:
+
+- [docs/security.md](./docs/security.md)

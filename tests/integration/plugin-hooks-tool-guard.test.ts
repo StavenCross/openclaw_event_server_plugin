@@ -4,10 +4,6 @@
 
 import {
   MockOpenClawApi,
-  createMockCommand,
-  createMockGatewayStartup,
-  createMockMessageReceived,
-  createMockMessageSent,
 } from '../mocks/openclaw-runtime';
 import { MockWebhookReceiver } from '../mocks/openclaw-runtime';
 import plugin from '../../src/index';
@@ -33,20 +29,6 @@ describe('Plugin Hook Integration', () => {
     if (receiver.receivedEvents.length < count) {
       throw new Error(`Timed out waiting for ${count} events, got ${receiver.receivedEvents.length}`);
     }
-  };
-
-  const waitForRequest = async (
-    predicate: (request: { body: unknown }) => boolean,
-    timeoutMs = 1500,
-  ): Promise<void> => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (receiver.requests.some((request) => predicate(request))) {
-        return;
-      }
-      await wait(25);
-    }
-    throw new Error('Timed out waiting for matching webhook request');
   };
 
   const latestEventByType = (expectedType: string): OpenClawEvent => {

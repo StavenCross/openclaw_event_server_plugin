@@ -14,6 +14,77 @@ export const CONFIG_SCHEMA = {
       description: 'Enable/disable the plugin',
       default: true,
     },
+    transport: {
+      type: 'object',
+      description: 'Single-owner transport coordination and relay configuration',
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['auto', 'owner', 'follower'],
+          description: 'Select automatic owner election or force owner/follower transport behavior',
+          default: DEFAULT_CONFIG.transport.mode,
+        },
+        lockPath: {
+          type: 'string',
+          default: DEFAULT_CONFIG.transport.lockPath,
+        },
+        socketPath: {
+          type: 'string',
+          default: DEFAULT_CONFIG.transport.socketPath,
+        },
+        lockStaleMs: {
+          type: 'integer',
+          minimum: 1000,
+          maximum: 300000,
+          default: DEFAULT_CONFIG.transport.lockStaleMs,
+        },
+        heartbeatMs: {
+          type: 'integer',
+          minimum: 250,
+          maximum: 60000,
+          default: DEFAULT_CONFIG.transport.heartbeatMs,
+        },
+        relayTimeoutMs: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 60000,
+          default: DEFAULT_CONFIG.transport.relayTimeoutMs,
+        },
+        reconnectBackoffMs: {
+          type: 'integer',
+          minimum: 50,
+          maximum: 30000,
+          default: DEFAULT_CONFIG.transport.reconnectBackoffMs,
+        },
+        maxPendingEvents: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 100000,
+          default: DEFAULT_CONFIG.transport.maxPendingEvents,
+        },
+        maxPayloadBytes: {
+          type: 'integer',
+          minimum: 1024,
+          maximum: 10485760,
+          default: DEFAULT_CONFIG.transport.maxPayloadBytes,
+        },
+        authToken: {
+          type: 'string',
+          description: 'Optional auth token required for follower relay connections',
+        },
+        dedupeTtlMs: {
+          type: 'integer',
+          minimum: 1000,
+          maximum: 600000,
+          default: DEFAULT_CONFIG.transport.dedupeTtlMs,
+        },
+        semanticDedupeEnabled: {
+          type: 'boolean',
+          default: DEFAULT_CONFIG.transport.semanticDedupeEnabled,
+          description: 'Apply semantic dedupe in addition to eventId retry dedupe',
+        },
+      },
+    },
     webhooks: {
       type: 'array',
       description: 'Webhook endpoints to broadcast events to',
