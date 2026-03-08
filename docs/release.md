@@ -15,7 +15,7 @@ nvm use
 3. Run the shared preflight:
 
 ```bash
-npm run verify:ci
+npm run verify:release-lane
 ```
 
 4. Prepare the release locally:
@@ -36,7 +36,7 @@ Or prepare and push in one step:
 - requires a clean working tree
 - requires the release lane toolchain from [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc), currently Node 20.x with npm 10.x, so local verification matches GitHub Actions
 - refreshes dependencies with `npm ci`
-- runs `npm run verify:ci` unless `--no-verify` is supplied
+- runs `npm run verify:release-lane` unless `--no-verify` is supplied
 - bumps `package.json` and `package-lock.json`
 - syncs `openclaw.plugin.json`, `src/version.ts`, and `docs/api.md`
 - creates `chore(release): vX.Y.Z`
@@ -51,6 +51,9 @@ Or prepare and push in one step:
   match GitHub Actions, which prevents false-green local runs.
 - `npm ci` makes the local dependency tree match the lockfile-based GitHub
   install path instead of relying on an older or mutated `node_modules`.
+- The manual preflight command resolves the pinned release-lane toolchain
+  directly, so it still works when the interactive shell prefers a different
+  global Node installation.
 - Compatibility coverage for newer supported Node majors lives in CI, but
   publishing stays pinned to the release lane so npm releases are deterministic.
 - Atomic push prevents the branch/tag split-brain case where `main` pushes but

@@ -63,26 +63,9 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# Fail fast when the local toolchain does not match GitHub Actions. This keeps
-# local release validation from producing a false green on a different Node/npm
-# pair than the one that will publish the package.
-EXPECTED_NODE_MAJOR="$(tr -d '[:space:]' < .nvmrc)"
-CURRENT_NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
-CURRENT_NPM_MAJOR="$(npm -v | cut -d. -f1)"
-
-if [[ "$CURRENT_NODE_MAJOR" != "$EXPECTED_NODE_MAJOR" ]]; then
-  echo "Release verification must run on Node $EXPECTED_NODE_MAJOR.x to match GitHub Actions." >&2
-  echo "Current Node version: $(node -v)" >&2
-  echo "Run 'nvm use' (or switch your toolchain) before releasing." >&2
-  exit 1
-fi
-
-if [[ "$CURRENT_NPM_MAJOR" != "10" ]]; then
-  echo "Release verification must run on npm 10.x to match the pinned package manager." >&2
-  echo "Current npm version: $(npm -v)" >&2
-  echo "Use the Node toolchain from .nvmrc so npm matches GitHub Actions." >&2
-  exit 1
-fi
+# shellcheck disable=SC1091
+. "$ROOT_DIR/scripts/release-node-env.sh"
+use_release_node_toolchain "$ROOT_DIR"
 
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   echo "Not inside a git repository." >&2
@@ -101,10 +84,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 if [[ "$VERIFY" == "true" ]]; then
-  echo "Refreshing dependencies with npm ci to match GitHub Actions..."
-  npm ci
-  echo "Running release verification (CI=1 lint + build + test)..."
-  npm run verify:ci
+  "$ROOT_DIR/scripts/verify-release-lane.sh"
 fi
 
 echo "Bumping version: $VERSION_INPUT"

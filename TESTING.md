@@ -16,6 +16,7 @@ npm run build
 npm test -- --runInBand
 npm run verify:release
 npm run verify:ci
+npm run verify:release-lane
 ```
 
 Focused suites:

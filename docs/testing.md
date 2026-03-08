@@ -14,17 +14,18 @@ npm run build
 npm test -- --runInBand
 npm run verify:release
 npm run verify:ci
+npm run verify:release-lane
 ```
 
 Preferred release preflight:
 
 ```bash
-npm run verify:ci
+npm run verify:release-lane
 ```
 
-This matches the checks executed by the local release script and the release
-publish workflow so tagged releases do not rely on a different command path
-than day-to-day verification.
+This resolves the Node toolchain from [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc), refreshes dependencies with
+`npm ci`, and runs the same release-lane verification path used by the local
+release script.
 
 ## Toolchain Parity
 
@@ -37,6 +38,15 @@ nvm use
 GitHub Actions reads [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc) and installs dependencies with `npm ci`, so local release verification
 should do the same. Running tests on a newer Node major can hide or introduce
 socket and timing behavior that does not match the release runners.
+
+If your interactive shell still prefers another global Node installation, use:
+
+```bash
+npm run verify:release-lane
+```
+
+That command resolves the pinned release-lane binaries directly, so it remains
+reliable even when `nvm use` alone is not enough in the current shell session.
 
 The CI workflow also runs a compatibility matrix on Node 20, 22, and 24. Node
 20 is the canonical release lane, while newer majors are treated as

@@ -26,6 +26,7 @@
     "lint": "eslint src tests --ext .ts",
     "verify:release": "npm run lint && npm run build && npm test -- --runInBand",
     "verify:ci": "CI=1 npm run verify:release",
+    "verify:release-lane": "./scripts/verify-release-lane.sh",
     "release": "./scripts/release.sh",
     "toolguard:replay": "node dist/tools/replay-tool-guard.js",
     "prepublishOnly": "npm run build"
