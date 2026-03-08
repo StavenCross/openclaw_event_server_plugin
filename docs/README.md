@@ -15,6 +15,7 @@ This folder is the implementation-aligned documentation for `openclaw-event-serv
 - [Backend](./backend.md): code structure, runtime lifecycle, processing pipeline.
 - [UI](./ui.md): recommended dashboard/consumer patterns for this plugin.
 - [Testing](./testing.md): test strategy, suite coverage map, and CI/local commands.
+- [Release](./release.md): local release flow, shared verification, and tag publish guidance.
 
 ## Source Of Truth
 

@@ -7,10 +7,40 @@ This document describes the test strategy and suites for `openclaw-event-server-
 Run full local checks:
 
 ```bash
+nvm use
+npm ci
 npm run lint
 npm run build
 npm test -- --runInBand
+npm run verify:release
+npm run verify:ci
 ```
+
+Preferred release preflight:
+
+```bash
+npm run verify:ci
+```
+
+This matches the checks executed by the local release script and the release
+publish workflow so tagged releases do not rely on a different command path
+than day-to-day verification.
+
+## Toolchain Parity
+
+Switch to the repository-pinned Node toolchain before validating release work:
+
+```bash
+nvm use
+```
+
+GitHub Actions reads [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc) and installs dependencies with `npm ci`, so local release verification
+should do the same. Running tests on a newer Node major can hide or introduce
+socket and timing behavior that does not match the release runners.
+
+The CI workflow also runs a compatibility matrix on Node 20, 22, and 24. Node
+20 is the canonical release lane, while newer majors are treated as
+compatibility signals rather than the version used to publish a release.
 
 Focused suites:
 
@@ -89,7 +119,8 @@ Defined in `jest.config.js`:
 Use deterministic execution in CI:
 
 ```bash
-npm test -- --runInBand
+npm run verify:ci
 ```
 
-This reduces worker-related nondeterminism and aligns with local review runs.
+This reduces worker-related nondeterminism and keeps the CI path aligned with
+local release verification.

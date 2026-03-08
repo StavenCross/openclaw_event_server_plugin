@@ -4,6 +4,11 @@
   "description": "OpenClaw plugin for capturing and broadcasting events via webhooks",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
   "files": [
     "dist",
     "openclaw.plugin.json",
@@ -19,6 +24,8 @@
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
     "lint": "eslint src tests --ext .ts",
+    "verify:release": "npm run lint && npm run build && npm test -- --runInBand",
+    "verify:ci": "CI=1 npm run verify:release",
     "release": "./scripts/release.sh",
     "toolguard:replay": "node dist/tools/replay-tool-guard.js",
     "prepublishOnly": "npm run build"

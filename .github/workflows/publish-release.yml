@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: ".nvmrc"
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
 
@@ -60,11 +60,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build
-        run: npm run build
-
-      - name: Test
-        run: npm test -- --runInBand
+      - name: Verify Release Checks
+        run: npm run verify:ci
 
       - name: Publish to npm
         env:

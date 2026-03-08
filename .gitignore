@@ -8,5 +8,4 @@ npm-debug.log*
 .event-plugin-hmac.secret
 .event-server/
 RELEASING.md
-scripts/release.sh
 AGENTS.md

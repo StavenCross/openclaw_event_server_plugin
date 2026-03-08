@@ -9,9 +9,13 @@ Detailed test architecture, suite breakdown, and coverage guidance now lives in:
 ## Quick Commands
 
 ```bash
+nvm use
+npm ci
 npm run lint
 npm run build
 npm test -- --runInBand
+npm run verify:release
+npm run verify:ci
 ```
 
 Focused suites:

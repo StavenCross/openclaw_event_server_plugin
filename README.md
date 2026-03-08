@@ -104,6 +104,8 @@ Useful files:
 - `examples/tool-guard-bundles/`
 - `TESTING.md`
 - `CONTRIBUTING.md`
+- `.nvmrc`
+- `docs/release.md`
 
 ## Documentation
 
@@ -119,6 +121,7 @@ Implementation docs now live in [`docs/`](./docs/README.md):
 - [Backend](./docs/backend.md)
 - [UI Integration](./docs/ui.md)
 - [Testing](./docs/testing.md)
+- [Release](./docs/release.md)
 
 ## Compatibility
 
@@ -126,6 +129,8 @@ Compatibility is pinned to the OpenClaw hook surface fixture and verified by con
 
 - fixture: `tests/fixtures/openclaw-hook-surface.v7b5e64.json`
 - contracts: `tests/contract/`
+
+Release publishing is pinned to the repository toolchain in [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc), while CI also exercises newer supported Node majors for runtime compatibility.
 
 ## License
 
