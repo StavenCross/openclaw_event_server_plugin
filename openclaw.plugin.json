@@ -1,7 +1,7 @@
 {
   "id": "event-server-plugin",
   "name": "OpenClaw Event Server Plugin",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Broadcasts OpenClaw internal/plugin hook events to WebSocket and webhooks with synthetic agent status/activity signals",
   "homepage": "https://github.com/openclaw/openclaw-event-server-plugin",
   "author": "OpenClaw Community",
