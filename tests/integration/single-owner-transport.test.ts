@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_CONFIG, type PluginConfig } from '../../src/config';
@@ -394,6 +394,54 @@ describe('single-owner transport', () => {
     const logLines = await readLogLines(eventLogPath);
     const parsed = logLines.map((line) => JSON.parse(line) as { type?: string; kind?: string });
     expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent')).toHaveLength(0);
+  });
+
+  it('recovers owner relay transport after a transient socket bind failure without restarting the gateway', async () => {
+    ownerPlugin = createPlugin();
+    followerPlugin = createPlugin();
+    ownerApi = new MockOpenClawApi();
+    followerApi = new MockOpenClawApi();
+
+    // Occupy the socket path with a directory so the owner bind fails on the
+    // first attempt. The owner should recover after the path is cleared.
+    await mkdir(socketPath);
+
+    ownerApi.config = buildConfig({
+      transport: {
+        mode: 'owner',
+        reconnectBackoffMs: 50,
+      },
+    }) as unknown as Record<string, unknown>;
+    followerApi.config = buildConfig({
+      transport: {
+        mode: 'follower',
+        reconnectBackoffMs: 50,
+        relayTimeoutMs: 250,
+      },
+    }) as unknown as Record<string, unknown>;
+
+    ownerPlugin.activate(ownerApi);
+    followerPlugin.activate(followerApi);
+    await wait(150);
+    receiver.clear();
+
+    await followerApi.triggerHook(
+      'message:sent',
+      createMockMessageSent({ content: 'owner recovery without restart' }),
+    );
+
+    await rm(socketPath, { recursive: true, force: true });
+
+    const relayed = await waitForEventType(receiver, 'message.sent', 1, 5000);
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0].metadata?.transport).toMatchObject({
+      route: 'relay',
+      emittedByRole: 'follower',
+    });
+
+    const logLines = await waitForLogContains(eventLogPath, 'message.sent', 5000);
+    const parsed = logLines.map((line) => JSON.parse(line) as { type: string; kind: string });
+    expect(parsed.filter((line) => line.kind === 'event' && line.type === 'message.sent')).toHaveLength(1);
   });
 
 });

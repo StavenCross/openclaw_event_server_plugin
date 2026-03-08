@@ -9,15 +9,23 @@ export function startRelayServer(params: {
   authToken?: string;
   logger: RuntimeLogger;
   onEvent: (event: OpenClawEvent) => Promise<void>;
+  onListening?: () => void;
+  onClose?: () => void;
   onFatalError: (reason: string) => void;
 }): Server {
   const server = createServer((socket) => {
     handleIncomingSocket(socket, params);
   });
 
+  server.on('listening', () => {
+    params.onListening?.();
+  });
   server.on('error', (error) => {
     params.logger.error('[Transport] Owner ingest server error', error.message);
     params.onFatalError('owner ingest server error');
+  });
+  server.on('close', () => {
+    params.onClose?.();
   });
 
   server.listen(params.socketPath);

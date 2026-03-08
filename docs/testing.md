@@ -44,6 +44,10 @@ Key unit suites include:
 - runtime event operations and utility helpers
 - hook bridge action execution and tool guard matching/decision logic
 - transport manager owner/follower logic
+- transport owner self-recovery after transient relay socket bind failures
+- transport lock reclaim when a fresh lock references a dead owner pid
+- transport recovery logging for follower relay failures and owner demotion/rebind
+- owner relay socket listening logs and live-owner lock contention diagnostics
 - relay socket auth/ack/error handling
 - websocket security authorization checks
 - event file logging behavior
@@ -61,6 +65,7 @@ Integration suites validate end-to-end plugin behavior across hooks and transpor
 - HMAC secret file resolution
 - single-owner transport coordination
 - owner demotion/failover cleanup of the singleton WebSocket broadcast server
+- owner relay recovery without requiring a gateway restart after transient socket bind failure
 
 ## Contract Coverage Areas
 

@@ -47,6 +47,32 @@ export function parseLockPayload(raw: string): LockFilePayload | null {
   }
 }
 
+export function readLockPayload(lockPath: string): LockFilePayload | null {
+  try {
+    return parseLockPayload(readFileSync(lockPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+export function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ESRCH') {
+      return false;
+    }
+    // EPERM means the process exists but we cannot signal it.
+    return true;
+  }
+}
+
 export function writeNewLock(lockPath: string, payload: LockFilePayload): boolean {
   mkdirSync(dirname(lockPath), { recursive: true });
   const serialized = JSON.stringify(payload);
@@ -62,9 +88,11 @@ export function overwriteLock(lockPath: string, payload: LockFilePayload): void 
 
 export function isLockStale(lockPath: string, staleAfterMs: number): boolean {
   try {
-    const raw = readFileSync(lockPath, 'utf8');
-    const payload = parseLockPayload(raw);
+    const payload = readLockPayload(lockPath);
     if (payload) {
+      if (!isProcessAlive(payload.pid)) {
+        return true;
+      }
       return Date.now() - payload.updatedAt > staleAfterMs;
     }
   } catch {

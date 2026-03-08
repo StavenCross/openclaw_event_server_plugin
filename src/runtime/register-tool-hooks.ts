@@ -14,6 +14,7 @@ import {
   readObject,
   readString,
   registerTypedHook,
+  registerTypedHookFireAndForget,
   registerTypedHookWithResult,
   resolveAgentId,
   resolveSessionRefs,
@@ -377,7 +378,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
     },
   );
 
-  registerTypedHook(
+  registerTypedHookFireAndForget(
     logger,
     api,
     'tool_result_persist',

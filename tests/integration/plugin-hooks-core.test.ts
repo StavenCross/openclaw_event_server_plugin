@@ -246,6 +246,19 @@ describe('Plugin Hook Integration', () => {
     expect((await latestEventByType('tool.result_persist')).eventName).toBe('tool_result_persist');
   });
 
+  it('registers tool_result_persist as a synchronous hook handler', async () => {
+    const registration = api.registeredTypedHooks.find((hook) => hook.event === 'tool_result_persist');
+    expect(registration).toBeDefined();
+
+    const result = registration?.handler(
+      { toolName: 'read', toolCallId: 'call-sync', message: { type: 'toolResult' }, isSynthetic: false },
+      { agentId: 'quinn', sessionId: 'tool-session-1', sessionKey: 'tool-session-1' },
+    );
+
+    expect(result).toBeUndefined();
+    await waitForEvents(1);
+  });
+
   it('dispatches hook bridge webhook action for matching tool.called event', async () => {
     await plugin.deactivate();
 

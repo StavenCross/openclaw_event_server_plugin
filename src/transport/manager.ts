@@ -1,25 +1,18 @@
-import { rmSync, unlinkSync } from 'node:fs';
 import { type Server } from 'node:net';
-import { dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
 import { TransportConfig } from '../config';
 import { OpenClawEvent } from '../events/types';
 import { RuntimeLogger } from '../runtime/types';
+import { buildSemanticKey, cloneEventWithTransportMetadata, type TransportRole } from './protocol';
+import { logTransportInfo, logTransportWarn } from './log-context';
 import {
-  isLockStale,
-  overwriteLock,
-  removeLockIfOwned,
-  writeNewLock,
-  type LockFilePayload,
-} from './lock';
-import {
-  buildSemanticKey,
-  cloneEventWithTransportMetadata,
-  type TransportRole,
-} from './protocol';
+  acquireTransportLock,
+  cleanupTransportSocketPath,
+  prepareTransportSocketPath,
+  releaseTransportLock,
+  writeTransportHeartbeat,
+} from './ownership';
 import { sendRelayEvent } from './relay-client';
 import { startRelayServer } from './relay-server';
-
 export type { TransportRole } from './protocol';
 
 /**
@@ -34,11 +27,11 @@ export class TransportManager {
   private readonly onRoleChange?: (role: TransportRole) => void;
   private readonly seenEventIds: Map<string, number> = new Map();
   private readonly seenSemanticKeys: Map<string, number> = new Map();
-
   private role: TransportRole = 'follower';
   private server?: Server;
   private heartbeatTimer?: NodeJS.Timeout;
   private retryTimer?: NodeJS.Timeout;
+  private ownerRecoveryTimer?: NodeJS.Timeout;
   private pendingEvents: OpenClawEvent[] = [];
   private flushing = false;
   private stopped = false;
@@ -60,23 +53,28 @@ export class TransportManager {
 
   start(): void {
     this.stopped = false;
-
     if (this.config.mode === 'follower') {
       this.setRole('follower');
       return;
     }
-
     if (this.tryBecomeOwner()) {
       return;
     }
-
     if (this.config.mode === 'owner') {
-      this.logger.warn(
+      logTransportWarn(
+        this.logger,
         '[Transport] Owner mode could not acquire transport lock. Falling back to follower relay mode.',
+        {
+          config: this.config,
+          runtimeId: this.runtimeId,
+          role: this.role,
+          pendingEvents: this.pendingEvents.length,
+          reason: 'initial owner lock acquisition failed',
+        },
       );
     }
-
     this.setRole('follower');
+    this.scheduleOwnerRecovery(this.config.reconnectBackoffMs);
   }
 
   getRole(): TransportRole {
@@ -100,7 +98,10 @@ export class TransportManager {
 
   async stop(): Promise<void> {
     this.stopped = true;
-
+    if (this.ownerRecoveryTimer) {
+      clearTimeout(this.ownerRecoveryTimer);
+      this.ownerRecoveryTimer = undefined;
+    }
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = undefined;
@@ -124,14 +125,24 @@ export class TransportManager {
     }
 
     if (hadServer) {
-      this.cleanupSocketPath();
+      cleanupTransportSocketPath(this.config.socketPath);
     }
   }
 
   private enqueueForFollowerRelay(event: OpenClawEvent): void {
     if (this.pendingEvents.length >= this.config.maxPendingEvents) {
       this.pendingEvents.shift();
-      this.logger.warn('[Transport] Follower relay queue full, dropping oldest pending event');
+      logTransportWarn(
+        this.logger,
+        '[Transport] Follower relay queue full, dropping oldest pending event',
+        {
+          config: this.config,
+          runtimeId: this.runtimeId,
+          role: this.role,
+          pendingEvents: this.pendingEvents.length,
+          reason: 'pending follower relay queue reached capacity',
+        },
+      );
     }
 
     this.pendingEvents.push(event);
@@ -178,7 +189,18 @@ export class TransportManager {
           await this.sendToOwner(next);
           this.pendingEvents.shift();
         } catch (error) {
-          this.logger.warn('[Transport] Failed to relay event to owner', String(error));
+          logTransportWarn(
+            this.logger,
+            '[Transport] Failed to relay event to owner; event remains queued while transport recovery is pending',
+            {
+              config: this.config,
+              runtimeId: this.runtimeId,
+              role: this.role,
+              pendingEvents: this.pendingEvents.length,
+              reason: 'follower relay attempt failed',
+              error: String(error),
+            },
+          );
           if (this.config.mode === 'auto' && this.tryPromoteFromFollower()) {
             continue;
           }
@@ -205,11 +227,7 @@ export class TransportManager {
   }
 
   private tryPromoteFromFollower(): boolean {
-    if (this.role !== 'follower') {
-      return false;
-    }
-
-    return this.tryBecomeOwner();
+    return this.role === 'follower' && this.tryBecomeOwner();
   }
 
   private tryBecomeOwner(): boolean {
@@ -218,48 +236,38 @@ export class TransportManager {
       return false;
     }
 
+    if (this.ownerRecoveryTimer) {
+      clearTimeout(this.ownerRecoveryTimer);
+      this.ownerRecoveryTimer = undefined;
+    }
     this.setRole('owner');
     this.startOwnerServer();
     this.startHeartbeat();
-    this.logger.info('[Transport] This runtime is the active transport owner', {
-      runtimeId: this.runtimeId,
-      socketPath: this.config.socketPath,
-    });
+    logTransportInfo(
+      this.logger,
+      '[Transport] This runtime is the active transport owner',
+      {
+        config: this.config,
+        runtimeId: this.runtimeId,
+        role: this.role,
+        pendingEvents: this.pendingEvents.length,
+      },
+    );
     return true;
   }
 
   private acquireLock(): boolean {
-    const payload = this.getLockPayload();
-
-    try {
-      writeNewLock(this.config.lockPath, payload);
+    const acquired = acquireTransportLock({
+      config: this.config,
+      logger: this.logger,
+      runtimeId: this.runtimeId,
+      role: this.role,
+      pendingEvents: this.pendingEvents.length,
+    });
+    if (acquired) {
       this.ownsLock = true;
-      return true;
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'EEXIST') {
-        this.logger.warn('[Transport] Failed to acquire transport lock', err.message);
-        return false;
-      }
     }
-
-    if (!isLockStale(this.config.lockPath, this.config.lockStaleMs)) {
-      return false;
-    }
-
-    try {
-      unlinkSync(this.config.lockPath);
-    } catch {
-      return false;
-    }
-
-    try {
-      writeNewLock(this.config.lockPath, payload);
-      this.ownsLock = true;
-      return true;
-    } catch {
-      return false;
-    }
+    return acquired;
   }
 
   private startOwnerServer(): void {
@@ -267,7 +275,7 @@ export class TransportManager {
       return;
     }
 
-    this.prepareSocketPath();
+    prepareTransportSocketPath(this.config.socketPath);
 
     this.server = startRelayServer({
       socketPath: this.config.socketPath,
@@ -285,35 +293,21 @@ export class TransportManager {
           'relay',
         );
       },
+      onListening: () => {
+        logTransportInfo(this.logger, '[Transport] Owner relay server is listening', {
+          config: this.config,
+          runtimeId: this.runtimeId,
+          role: this.role,
+          pendingEvents: this.pendingEvents.length,
+        });
+      },
+      onClose: () => {
+        this.handleOwnerFailure('owner ingest server closed');
+      },
       onFatalError: (reason) => {
         this.handleOwnerFailure(reason);
       },
     });
-  }
-
-  private prepareSocketPath(): void {
-    if (process.platform === 'win32') {
-      return;
-    }
-
-    mkdirSync(dirname(this.config.socketPath), { recursive: true });
-    try {
-      rmSync(this.config.socketPath, { force: true });
-    } catch {
-      // ignore stale socket cleanup failures
-    }
-  }
-
-  private cleanupSocketPath(): void {
-    if (process.platform === 'win32') {
-      return;
-    }
-
-    try {
-      unlinkSync(this.config.socketPath);
-    } catch {
-      // ignore socket cleanup races
-    }
   }
 
   private async processOwnerEvent(event: OpenClawEvent, route: 'local' | 'relay'): Promise<void> {
@@ -391,27 +385,18 @@ export class TransportManager {
       return false;
     }
 
-    try {
-      overwriteLock(this.config.lockPath, this.getLockPayload());
-      return true;
-    } catch (error) {
-      this.logger.warn('[Transport] Failed to update transport heartbeat', String(error));
-      return false;
-    }
+    return writeTransportHeartbeat({
+      config: this.config,
+      logger: this.logger,
+      runtimeId: this.runtimeId,
+      role: this.role,
+      pendingEvents: this.pendingEvents.length,
+    });
   }
 
   private releaseLock(): void {
-    removeLockIfOwned(this.config.lockPath, this.runtimeId);
+    releaseTransportLock(this.config.lockPath, this.runtimeId);
     this.ownsLock = false;
-  }
-
-  private getLockPayload(): LockFilePayload {
-    return {
-      runtimeId: this.runtimeId,
-      pid: process.pid,
-      updatedAt: Date.now(),
-      socketPath: this.config.socketPath,
-    };
   }
 
   private handleOwnerFailure(reason: string): void {
@@ -423,7 +408,7 @@ export class TransportManager {
     this.server = undefined;
     if (server) {
       server.close();
-      this.cleanupSocketPath();
+      cleanupTransportSocketPath(this.config.socketPath);
     }
 
     if (this.heartbeatTimer) {
@@ -435,14 +420,68 @@ export class TransportManager {
       this.releaseLock();
     }
 
-    this.logger.warn('[Transport] Demoting owner runtime to follower', {
-      runtimeId: this.runtimeId,
-      reason,
-    });
+    logTransportWarn(
+      this.logger,
+      '[Transport] Demoting owner runtime to follower; follower relays may temporarily report ECONNREFUSED until recovery succeeds',
+      {
+        config: this.config,
+        runtimeId: this.runtimeId,
+        role: this.role,
+        pendingEvents: this.pendingEvents.length,
+        reason,
+      },
+    );
 
     this.setRole('follower');
+    this.scheduleOwnerRecovery(this.config.reconnectBackoffMs);
     if (this.pendingEvents.length > 0) {
       this.scheduleFlush(this.config.reconnectBackoffMs);
+    }
+  }
+
+  private scheduleOwnerRecovery(delayMs: number): void {
+    if (this.config.mode === 'follower' || this.stopped || this.ownerRecoveryTimer) {
+      return;
+    }
+
+    logTransportInfo(
+      this.logger,
+      '[Transport] Scheduling owner transport recovery attempt',
+      {
+        config: this.config,
+        runtimeId: this.runtimeId,
+        role: this.role,
+        pendingEvents: this.pendingEvents.length,
+        reason: 'owner transport recovery scheduled',
+        extra: { delayMs },
+      },
+    );
+
+    this.ownerRecoveryTimer = setTimeout(() => {
+      this.ownerRecoveryTimer = undefined;
+      if (this.stopped || this.role === 'owner') {
+        return;
+      }
+
+      logTransportInfo(
+        this.logger,
+        '[Transport] Attempting owner transport recovery',
+        {
+          config: this.config,
+          runtimeId: this.runtimeId,
+          role: this.role,
+          pendingEvents: this.pendingEvents.length,
+          reason: 'owner transport recovery starting',
+          extra: { delayMs },
+        },
+      );
+      if (!this.tryBecomeOwner()) {
+        this.scheduleOwnerRecovery(this.config.reconnectBackoffMs);
+      }
+    }, delayMs);
+
+    if (this.ownerRecoveryTimer.unref) {
+      this.ownerRecoveryTimer.unref();
     }
   }
 

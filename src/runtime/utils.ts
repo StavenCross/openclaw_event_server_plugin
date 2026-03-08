@@ -158,6 +158,23 @@ export function registerTypedHook(
   api.on(event, (hookEvent, ctx) => runHookSafely(logger, event, () => handler(hookEvent, ctx)), options);
 }
 
+export function registerTypedHookFireAndForget(
+  logger: RuntimeLogger,
+  api: OpenClawPluginApi,
+  event: string,
+  options: HookRegistrationOptions,
+  handler: (event: unknown, ctx: unknown) => void | Promise<void>,
+): void {
+  api.on(
+    event,
+    (hookEvent, ctx) => {
+      void runHookSafely(logger, event, () => handler(hookEvent, ctx));
+      return undefined;
+    },
+    options,
+  );
+}
+
 export function registerTypedHookWithResult<TResult>(
   logger: RuntimeLogger,
   api: OpenClawPluginApi,
