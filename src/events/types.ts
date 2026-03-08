@@ -57,6 +57,15 @@ export type EventType =
 
 export type AgentSyntheticStatus = 'sleeping' | 'idle' | 'working' | 'offline' | 'error';
 
+/**
+ * Normalized subagent termination reasons.
+ *
+ * Keep this list stable for downstream consumers even if upstream runtimes add
+ * new cleanup modes later. Unknown or older runtimes should fall back to
+ * `unknown` rather than omitting the field so consumers can branch safely.
+ */
+export type SubagentEndReason = 'completed' | 'deleted' | 'swept' | 'released' | 'unknown';
+
 export interface EventError {
   message: string;
   code?: string;

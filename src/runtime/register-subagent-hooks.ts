@@ -15,6 +15,18 @@ import {
   toContext,
 } from './utils';
 
+function normalizeSubagentEndReason(value: unknown): 'completed' | 'deleted' | 'swept' | 'released' | 'unknown' {
+  switch (value) {
+    case 'completed':
+    case 'deleted':
+    case 'swept':
+    case 'released':
+      return value;
+    default:
+      return 'unknown';
+  }
+}
+
 export function registerSubagentHooks(api: OpenClawPluginApi, deps: TypedHookDeps): void {
   const { state, logger, ops } = deps;
 
@@ -149,6 +161,7 @@ export function registerSubagentHooks(api: OpenClawPluginApi, deps: TypedHookDep
         sessionKey: sessionRefs.sessionKey,
         runId: readString(raw.runId) ?? readString(ctx?.runId),
         childSessionKey,
+        endReason: normalizeSubagentEndReason(readString(raw.reason)),
         data: {
           ...raw,
           parentAgentId: agentId,

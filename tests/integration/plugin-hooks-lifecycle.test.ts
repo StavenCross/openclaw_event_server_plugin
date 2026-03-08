@@ -166,6 +166,7 @@ describe('Plugin Hook Integration', () => {
       {
         targetSessionKey: 'child-1',
         runId: 'run-sub-1',
+        reason: 'completed',
       },
       {
         agentId: 'parent-agent',
@@ -179,7 +180,27 @@ describe('Plugin Hook Integration', () => {
     expect((await latestEventByType('subagent.spawning')).eventCategory).toBe('subagent');
     expect((await latestEventByType('subagent.spawned')).eventCategory).toBe('subagent');
     expect((await latestEventByType('subagent.ended')).eventCategory).toBe('subagent');
+    expect((await latestEventByType('subagent.ended')).data.endReason).toBe('completed');
     expect((await latestEventByType('agent.sub_agent_spawn')).eventCategory).toBe('synthetic');
+  });
+
+  it('defaults subagent.ended data.endReason to unknown for older runtimes', async () => {
+    await api.triggerTypedHook(
+      'subagent_ended',
+      {
+        targetSessionKey: 'child-legacy',
+        runId: 'run-sub-legacy',
+      },
+      {
+        agentId: 'parent-agent',
+        sessionId: 'parent-session-legacy',
+        sessionKey: 'parent-session-legacy',
+      },
+    );
+
+    await waitForEvents(2);
+
+    expect((await latestEventByType('subagent.ended')).data.endReason).toBe('unknown');
   });
 
   it('broadcasts gateway startup/start/stop events', async () => {

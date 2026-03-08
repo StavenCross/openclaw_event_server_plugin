@@ -1,4 +1,4 @@
-import { SubagentEvent } from '../events/types';
+import { SubagentEndReason, SubagentEvent } from '../events/types';
 import { createCanonicalEvent } from './event-factory';
 
 export function createSubagentSpawningEvent(context: {
@@ -55,6 +55,7 @@ export function createSubagentEndedEvent(context: {
   sessionKey?: string;
   runId?: string;
   childSessionKey?: string;
+  endReason?: SubagentEndReason;
   data?: Record<string, unknown>;
 }): SubagentEvent {
   return createCanonicalEvent({
@@ -67,8 +68,11 @@ export function createSubagentEndedEvent(context: {
     sessionKey: context.sessionKey,
     runId: context.runId,
     data: {
-      childSessionKey: context.childSessionKey,
       ...(context.data ?? {}),
+      childSessionKey: context.childSessionKey,
+      // Normalize subagent cleanup semantics into the canonical event so older
+      // runtimes and newer runtimes share one stable downstream contract.
+      endReason: context.endReason ?? 'unknown',
     },
   });
 }

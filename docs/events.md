@@ -128,7 +128,7 @@ All event types share the same outer envelope:
 
 ### `subagent.ended`
 - `eventName`: `subagent_ended`
-- `data`: `childSessionKey?` + raw subagent payload
+- `data`: `childSessionKey?`, `endReason` (`completed|deleted|swept|released|unknown`) + raw subagent payload
 
 ### `subagent.idle` (synthetic)
 - `eventCategory`: `synthetic`
