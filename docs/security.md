@@ -66,6 +66,7 @@ Recommended hardening:
 - Use HTTPS endpoints only.
 - Keep auth tokens in secrets/env, not committed config files.
 - Restrict webhook endpoints to internal API gateways when possible.
+- Treat gateway debug logs as sensitive operational data. In observed OpenClaw gateway output, debug/startup config dumps included plugin configuration values and embedded credentials. Avoid leaving gateway debug enabled in steady state, and do not ship logs off-box without redaction.
 
 ## Hook Bridge Script Security
 

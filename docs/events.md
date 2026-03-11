@@ -194,3 +194,4 @@ All event types share the same outer envelope:
 - Tool lifecycle correlation is maintained via `toolCallId` and `correlationId`.
 - Session and subagent synthetic events include parent/child linkage fields in `data`.
 - Transport metadata may be injected into `metadata.transport` by the transport manager (`runtimeId`, `route`, role fields).
+- Downstream consumers may re-emit normalized socket events such as `agent_status`. Those are consumer-specific transport labels, not additional upstream OpenClaw hook names. When reviewing gateway debug logs for new upstream coverage, compare against the pinned hook surface fixture in `tests/fixtures/openclaw-hook-surface.v7b5e64.json`.
