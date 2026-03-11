@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG } from '../../src/config';
 import type { OpenClawEvent } from '../../src/events/types';
+import { AgentRunTracker } from '../../src/hooks/agent-run-tracker';
 import { AgentStatusReducer } from '../../src/hooks/status-reducer';
 import { SubagentTracker } from '../../src/hooks/subagent-tracker';
 import { SessionTracker } from '../../src/hooks/session-hooks';
@@ -41,6 +42,7 @@ function createState(): PluginState {
     pendingToolCalls: new Map(),
     pendingToolCallsByContext: new WeakMap(),
     sessionTracker: new SessionTracker(),
+    agentRunTracker: new AgentRunTracker(),
     statusReducer: new AgentStatusReducer(),
     subagentTracker: new SubagentTracker(),
     eventFileLogger: undefined,

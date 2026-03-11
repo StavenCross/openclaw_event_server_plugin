@@ -15,9 +15,9 @@ All event types share the same outer envelope:
 - Message: `message.received`, `message.transcribed`, `message.preprocessed`, `message.sent`, `message.edited`, `message.deleted`
 - Tool: `tool.called`, `tool.guard.matched`, `tool.guard.allowed`, `tool.guard.blocked`, `tool.completed`, `tool.error`, `tool.result_persist`
 - Command: `command.new`, `command.reset`, `command.stop`
-- Session: `session.start`, `session.end`
+- Session: `session.start`, `session.end`, `session.before_compaction`, `session.after_compaction`
 - Subagent: `subagent.spawning`, `subagent.spawned`, `subagent.ended`, `subagent.idle`
-- Agent: `agent.bootstrap`, `agent.error`, `agent.session_start`, `agent.session_end`, `agent.sub_agent_spawn`, `agent.status`, `agent.activity`
+- Agent: `agent.bootstrap`, `agent.error`, `agent.before_model_resolve`, `agent.before_prompt_build`, `agent.llm_input`, `agent.llm_output`, `agent.end`, `agent.session_start`, `agent.session_end`, `agent.sub_agent_spawn`, `agent.status`, `agent.activity`
 - Gateway: `gateway.startup`, `gateway.start`, `gateway.stop`
 - Legacy aliases: `session.spawned`, `session.completed`, `session.error`
 
@@ -103,6 +103,19 @@ All event types share the same outer envelope:
 - `eventName`: `session_end`
 - `data`: `sessionId`, `sessionKey?`, `agentId?`, `messageCount?`, `durationMs?`, optional metadata passthrough
 
+### `session.before_compaction`
+- `eventName`: `before_compaction`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `messageCount`, `compactingCount?`, `tokenCount?`, `hasSessionFile`, `messageRoles?`
+- `data` in full mode additionally includes: `messages?`, `sessionFile?`
+- semantic note: compaction is emitted as a session event because the session transcript is the thing being compacted, even when an agent initiates it
+
+### `session.after_compaction`
+- `eventName`: `after_compaction`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `messageCount`, `compactedCount`, `tokenCount?`, `hasSessionFile`
+- `data` in full mode additionally includes: `sessionFile?`
+
 ### Legacy `session.spawned`
 - compatibility alias
 - `data`: `sessionKey`, `parentSessionId?`, `agentId?`, `metadata.workspaceDir?`, `metadata.channel?`, `metadata.requester?`
@@ -147,6 +160,40 @@ All event types share the same outer envelope:
 - `eventName`: `agent:error`
 - `error.kind`: `agent`
 - `data`: raw error context
+
+### `agent.before_model_resolve`
+- `eventName`: `before_model_resolve`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `promptLength`
+- `data` in full mode additionally includes: `prompt`
+- semantic note: this is the earliest modern run hook and is intended for model/provider steering rather than prompt mutation
+
+### `agent.before_prompt_build`
+- `eventName`: `before_prompt_build`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `promptLength`, `messageCount`, `messageRoles?`
+- `data` in full mode additionally includes: `prompt`, `messages`
+- semantic note: this supersedes most legacy `before_agent_start` prompt-injection use cases
+
+### `agent.llm_input`
+- `eventName`: `llm_input`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `provider`, `model`, `promptLength`, `historyMessageCount`, `historyMessageRoles?`, `imagesCount`, `hasSystemPrompt`, prompt-delta audit fields when prior hook state exists
+- `data` in full mode additionally includes: `systemPrompt?`, `prompt`, `historyMessages`
+
+### `agent.llm_output`
+- `eventName`: `llm_output`
+- `source`: `plugin-hook`
+- `data` in default metadata mode: `provider`, `model`, `assistantTextCount`, `assistantTextLengths?`, `hasLastAssistant`, `usage?`
+- `data` in full mode additionally includes: `assistantTexts`, `lastAssistant?`
+
+### `agent.end`
+- `eventName`: `agent_end`
+- `source`: `plugin-hook`
+- `error.kind`: `agent` when `success=false` and upstream provides an error
+- `data` in default metadata mode: `messageCount`, `messageRoles?`, `success`, `error?`, `durationMs?`
+- `data` in full mode additionally includes: `messages`
+- semantic note: this is the stable "agent run finished" hook, not a scraped runtime debug line
 
 ### `agent.session_start`
 - `eventName`: `agent:session:start`
@@ -193,5 +240,8 @@ All event types share the same outer envelope:
 
 - Tool lifecycle correlation is maintained via `toolCallId` and `correlationId`.
 - Session and subagent synthetic events include parent/child linkage fields in `data`.
+- Hook Bridge rules can match the new agent/session lifecycle events through normal `eventType`, identity fields, and `data.*` matchers.
+- Tool Guard remains scoped to `before_tool_call`; prompt/model/compaction hooks are observable to Hook Bridge but not subject to synchronous tool-guard enforcement.
+- `privacy.payloadMode=metadata` is the default for these modern lifecycle hooks. Use `privacy.payloadMode=full` only when you intentionally want raw prompt/model/transcript payloads in downstream transports.
 - Transport metadata may be injected into `metadata.transport` by the transport manager (`runtimeId`, `route`, role fields).
-- Downstream consumers may re-emit normalized socket events such as `agent_status`. Those are consumer-specific transport labels, not additional upstream OpenClaw hook names. When reviewing gateway debug logs for new upstream coverage, compare against the pinned hook surface fixture in `tests/fixtures/openclaw-hook-surface.v7b5e64.json`.
+- Downstream consumers may re-emit normalized socket events such as `agent_status`. Those are consumer-specific transport labels, not additional upstream OpenClaw hook names. When reviewing gateway debug logs for new upstream coverage, compare against the pinned hook surface fixture in `tests/fixtures/openclaw-hook-surface.v3caab92.json`.

@@ -24,6 +24,7 @@ describe('Configuration Defaults', () => {
     expect(DEFAULT_CONFIG.redaction.enabled).toBe(false);
     expect(DEFAULT_CONFIG.redaction.replacement).toBe('[REDACTED]');
     expect(DEFAULT_CONFIG.redaction.fields.length).toBeGreaterThan(0);
+    expect(DEFAULT_CONFIG.privacy.payloadMode).toBe('metadata');
     expect(DEFAULT_CONFIG.eventLog.maxFileSizeMb).toBe(30);
   });
 });
@@ -198,6 +199,17 @@ describe('loadEnvConfig', () => {
       enabled: true,
       secret: 'hmac-secret',
       algorithm: 'sha512',
+    });
+  });
+
+  it('should load modern lifecycle privacy mode from environment', () => {
+    process.env.EVENT_PLUGIN_MODERN_LIFECYCLE_PAYLOAD_MODE = 'full';
+
+    const config = loadEnvConfig();
+
+    expect(config.privacy).toEqual({
+      ...DEFAULT_CONFIG.privacy,
+      payloadMode: 'full',
     });
   });
 });

@@ -83,6 +83,9 @@ Key unit suites include:
 - status reducer + subagent tracker
 - runtime event operations and utility helpers
 - hook bridge action execution and tool guard matching/decision logic
+- modern agent lifecycle typed hook registration and canonical event mapping
+- compaction lifecycle typed hook registration and canonical event mapping
+- privacy-mode shaping for modern lifecycle payloads (`metadata` vs `full`)
 - transport manager owner/follower logic
 - transport owner self-recovery after transient relay socket bind failures
 - transport lock reclaim when a fresh lock references a dead owner pid
@@ -99,6 +102,8 @@ Integration suites validate end-to-end plugin behavior across hooks and transpor
 
 - plugin hook mapping and lifecycle (`plugin-hooks-core`, `plugin-hooks-lifecycle`)
 - tool guard integration (`plugin-hooks-tool-guard`)
+- hook bridge matching for modern agent/session lifecycle events (currently covered in focused unit tests)
+- explicit opt-in tests for full lifecycle payload mode
 - queue init and queue delivery/retry/persistence
 - webhook delivery flow
 - websocket fallback/startup behavior and server behavior

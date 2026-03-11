@@ -127,7 +127,7 @@ Implementation docs now live in [`docs/`](./docs/README.md):
 
 Compatibility is pinned to the OpenClaw hook surface fixture and verified by contract tests:
 
-- fixture: `tests/fixtures/openclaw-hook-surface.v7b5e64.json`
+- fixture: `tests/fixtures/openclaw-hook-surface.v3caab92.json`
 - contracts: `tests/contract/`
 
 Release publishing is pinned to the repository toolchain in [`.nvmrc`](/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/.nvmrc), while CI also exercises newer supported Node majors for runtime compatibility.

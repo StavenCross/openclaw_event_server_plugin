@@ -48,6 +48,11 @@ export function mergeConfig(
       ...(baseConfig.redaction ?? {}),
       ...(envConfig.redaction ?? {}),
     },
+    privacy: {
+      ...DEFAULT_CONFIG.privacy,
+      ...(baseConfig.privacy ?? {}),
+      ...(envConfig.privacy ?? {}),
+    },
     eventLog: {
       ...DEFAULT_CONFIG.eventLog,
       ...(baseConfig.eventLog ?? {}),

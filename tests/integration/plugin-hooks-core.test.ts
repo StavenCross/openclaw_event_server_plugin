@@ -150,6 +150,13 @@ describe('Plugin Hook Integration', () => {
   it('registers expected typed plugin hooks', () => {
     const hooks = api.getHooks();
     const expectedTyped = [
+      'before_model_resolve',
+      'before_prompt_build',
+      'llm_input',
+      'llm_output',
+      'agent_end',
+      'before_compaction',
+      'after_compaction',
       'before_tool_call',
       'after_tool_call',
       'tool_result_persist',

@@ -143,6 +143,15 @@ export function loadEnvConfig(): Partial<PluginConfig> {
     };
   }
 
+  // Modern lifecycle payload privacy
+  const modernLifecyclePayloadMode = process.env.EVENT_PLUGIN_MODERN_LIFECYCLE_PAYLOAD_MODE;
+  if (modernLifecyclePayloadMode === 'metadata' || modernLifecyclePayloadMode === 'full') {
+    config.privacy = {
+      ...DEFAULT_CONFIG.privacy,
+      payloadMode: modernLifecyclePayloadMode,
+    };
+  }
+
   // Event file logging
   const eventLogEnabled = process.env.EVENT_PLUGIN_EVENT_LOG_ENABLED;
   const eventLogPath = process.env.EVENT_PLUGIN_EVENT_LOG_PATH;

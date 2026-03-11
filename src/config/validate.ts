@@ -117,6 +117,10 @@ export function validateConfig(config: PluginConfig): { valid: boolean; errors: 
     errors.push('Redaction fields cannot contain empty values');
   }
 
+  if (!['metadata', 'full'].includes(config.privacy.payloadMode)) {
+    errors.push('Privacy payloadMode must be metadata or full');
+  }
+
   // Validate event log config
   if (!config.eventLog.path || config.eventLog.path.trim() === '') {
     errors.push('Event log path cannot be empty');

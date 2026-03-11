@@ -1,0 +1,37 @@
+{
+  "openclawCommit": "3caab924d0d7c2e0d6e5e4fb2e9a4b7a3a7d1d7f",
+  "capturedAt": "2026-03-11",
+  "internalHooks": [
+    "message:received",
+    "message:transcribed",
+    "message:preprocessed",
+    "message:sent",
+    "command:new",
+    "command:reset",
+    "command:stop",
+    "agent:bootstrap",
+    "agent:error",
+    "agent:session:start",
+    "agent:session:end",
+    "gateway:startup"
+  ],
+  "pluginHooks": [
+    "before_model_resolve",
+    "before_prompt_build",
+    "llm_input",
+    "llm_output",
+    "agent_end",
+    "before_compaction",
+    "after_compaction",
+    "before_tool_call",
+    "after_tool_call",
+    "tool_result_persist",
+    "session_start",
+    "session_end",
+    "subagent_spawning",
+    "subagent_spawned",
+    "subagent_ended",
+    "gateway_start",
+    "gateway_stop"
+  ]
+}

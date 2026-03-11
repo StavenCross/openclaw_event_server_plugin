@@ -19,6 +19,8 @@ export interface PluginConfig {
   status: StatusConfig;
   /** Optional payload redaction before broadcast */
   redaction: RedactionConfig;
+  /** Privacy controls for modern lifecycle hook payloads */
+  privacy: ModernLifecyclePrivacyConfig;
   /** Event file logging configuration */
   eventLog: EventLogConfig;
   /** Security configuration for WS and event signatures */
@@ -29,6 +31,11 @@ export interface PluginConfig {
   webhookTimeoutMs: number;
   /** Optional event-driven automation bridge */
   hookBridge: HookBridgeConfig;
+}
+
+export interface ModernLifecyclePrivacyConfig {
+  /** Emit metadata-only payloads or full raw lifecycle content */
+  payloadMode: 'metadata' | 'full';
 }
 
 export interface TransportConfig {

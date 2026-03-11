@@ -93,6 +93,31 @@ Webhook delivery filtering supports:
 
 Filtering applies to HTTP webhooks. WebSocket broadcasts still get all emitted events.
 
+## Modern Agent Lifecycle Coverage
+
+The plugin now emits the modern OpenClaw run hooks as canonical events:
+
+- `agent.before_model_resolve`
+- `agent.before_prompt_build`
+- `agent.llm_input`
+- `agent.llm_output`
+- `agent.end`
+- `session.before_compaction`
+- `session.after_compaction`
+
+These travel through the same transport, relay, webhook, websocket, and event-log
+pipeline as every other canonical event. Hook Bridge rules can match them with
+the normal `eventType`, identity, and `data.*` selectors.
+
+By default, these events use `privacy.payloadMode=metadata`, which emits audit
+metadata and derived counters instead of raw prompts, transcript messages, or
+assistant output. Set `privacy.payloadMode=full` to opt into full upstream
+payload content for debugging or tightly controlled observability workflows.
+
+The metadata mode still carries useful audit fields such as `promptLength`,
+`messageCount`, `historyMessageCount`, `assistantTextCount`, resolved
+`provider`/`model`, and prompt-delta fields derived from earlier hook phases.
+
 ## Environment Variables
 
 Key runtime overrides:
@@ -104,6 +129,7 @@ Key runtime overrides:
 - Transport: `EVENT_PLUGIN_TRANSPORT_MODE`, `EVENT_PLUGIN_TRANSPORT_LOCK_PATH`, `EVENT_PLUGIN_TRANSPORT_SOCKET_PATH`, `EVENT_PLUGIN_TRANSPORT_LOCK_STALE_MS`, `EVENT_PLUGIN_TRANSPORT_HEARTBEAT_MS`, `EVENT_PLUGIN_TRANSPORT_RELAY_TIMEOUT_MS`, `EVENT_PLUGIN_TRANSPORT_RECONNECT_BACKOFF_MS`, `EVENT_PLUGIN_TRANSPORT_MAX_PENDING_EVENTS`, `EVENT_PLUGIN_TRANSPORT_MAX_PAYLOAD_BYTES`, `EVENT_PLUGIN_TRANSPORT_AUTH_TOKEN`, `EVENT_PLUGIN_TRANSPORT_DEDUPE_TTL_MS`, `EVENT_PLUGIN_TRANSPORT_SEMANTIC_DEDUPE_ENABLED`
 - Status: `EVENT_PLUGIN_STATUS_WORKING_WINDOW_MS`, `EVENT_PLUGIN_STATUS_SLEEPING_WINDOW_MS`, `EVENT_PLUGIN_STATUS_TICK_INTERVAL_MS`, `EVENT_PLUGIN_STATUS_SUBAGENT_IDLE_WINDOW_MS`
 - Redaction: `EVENT_PLUGIN_REDACTION_ENABLED`, `EVENT_PLUGIN_REDACTION_REPLACEMENT`, `EVENT_PLUGIN_REDACTION_FIELDS`
+- Modern lifecycle privacy: `EVENT_PLUGIN_MODERN_LIFECYCLE_PAYLOAD_MODE=metadata|full`
 - Event log: `EVENT_PLUGIN_EVENT_LOG_ENABLED`, `EVENT_PLUGIN_EVENT_LOG_PATH`, `EVENT_PLUGIN_EVENT_LOG_MAX_FILE_MB`, `EVENT_PLUGIN_EVENT_LOG_FORMAT`, `EVENT_PLUGIN_EVENT_LOG_MIN_LEVEL`, `EVENT_PLUGIN_EVENT_LOG_RUNTIME`
 - WS security: `EVENT_PLUGIN_WS_BIND_ADDRESS`, `EVENT_PLUGIN_WS_REQUIRE_AUTH`, `EVENT_PLUGIN_WS_AUTH_TOKEN`, `EVENT_PLUGIN_WS_ALLOWED_ORIGINS`, `EVENT_PLUGIN_WS_ALLOWED_IPS`, `EVENT_PLUGIN_WS_PORTS`, `EVENT_PLUGIN_DISABLE_WS`
 - HMAC: `EVENT_PLUGIN_HMAC_ENABLED`, `EVENT_PLUGIN_HMAC_SECRET`, `EVENT_PLUGIN_HMAC_SECRET_FILE`, `EVENT_PLUGIN_HMAC_ALGORITHM`

@@ -64,6 +64,9 @@ export const DEFAULT_CONFIG: PluginConfig = {
       'secret',
     ],
   },
+  privacy: {
+    payloadMode: 'metadata',
+  },
   eventLog: {
     enabled: true,
     path: '.event-server/events.ndjson',

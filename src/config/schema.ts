@@ -287,6 +287,18 @@ export const CONFIG_SCHEMA = {
         },
       },
     },
+    privacy: {
+      type: 'object',
+      description: 'Privacy controls for modern lifecycle hook payloads',
+      properties: {
+        payloadMode: {
+          type: 'string',
+          enum: ['metadata', 'full'],
+          default: DEFAULT_CONFIG.privacy.payloadMode,
+          description: 'Emit metadata-only lifecycle payloads by default, or opt into full raw prompt/model content',
+        },
+      },
+    },
     eventLog: {
       type: 'object',
       description: 'Event and runtime log file output',

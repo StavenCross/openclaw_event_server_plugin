@@ -130,6 +130,134 @@ describe('Plugin Hook Integration', () => {
     expect(end.eventName).toBe('session_end');
   });
 
+  it('broadcasts agent run lifecycle hooks from plugin typed hooks', async () => {
+    await api.triggerTypedHook(
+      'before_model_resolve',
+      { prompt: 'Summarize the thread.' },
+      { agentId: 'samantha', sessionId: 'agent-run-1', sessionKey: 'agent-run-1', runId: 'run-100' },
+    );
+    await api.triggerTypedHook(
+      'before_prompt_build',
+      { prompt: 'Summarize the thread.', messages: [{ role: 'user', content: 'Hello' }] },
+      { agentId: 'samantha', sessionId: 'agent-run-1', sessionKey: 'agent-run-1', runId: 'run-100' },
+    );
+    await api.triggerTypedHook(
+      'llm_input',
+      {
+        runId: 'run-100',
+        sessionId: 'agent-run-1',
+        provider: 'openai',
+        model: 'gpt-5',
+        prompt: 'Summarize the thread.',
+        historyMessages: [{ role: 'user', content: 'Hello' }],
+        imagesCount: 0,
+        systemPrompt: 'Be concise.',
+      },
+      { agentId: 'samantha', sessionId: 'agent-run-1', sessionKey: 'agent-run-1', runId: 'run-100' },
+    );
+    await api.triggerTypedHook(
+      'llm_output',
+      {
+        runId: 'run-100',
+        sessionId: 'agent-run-1',
+        provider: 'openai',
+        model: 'gpt-5',
+        assistantTexts: ['Summary complete.'],
+        usage: { input: 12, output: 6, total: 18 },
+      },
+      { agentId: 'samantha', sessionId: 'agent-run-1', sessionKey: 'agent-run-1', runId: 'run-100' },
+    );
+    await api.triggerTypedHook(
+      'agent_end',
+      { messages: [{ role: 'assistant', content: 'Summary complete.' }], success: true, durationMs: 3210 },
+      { agentId: 'samantha', sessionId: 'agent-run-1', sessionKey: 'agent-run-1', runId: 'run-100' },
+    );
+    await waitForEvents(5);
+
+    expect((await latestEventByType('agent.before_model_resolve')).eventName).toBe('before_model_resolve');
+    expect((await latestEventByType('agent.before_prompt_build')).eventName).toBe('before_prompt_build');
+    expect((await latestEventByType('agent.llm_input')).data.provider).toBe('openai');
+    expect((await latestEventByType('agent.llm_input')).data.prompt).toBeUndefined();
+    expect((await latestEventByType('agent.llm_input')).data.promptChangedFromBeforePromptBuild).toBe(false);
+    expect((await latestEventByType('agent.llm_output')).data.assistantTexts).toBeUndefined();
+    expect((await latestEventByType('agent.llm_output')).data.assistantTextCount).toBe(1);
+    expect((await latestEventByType('agent.end')).data.durationMs).toBe(3210);
+    expect((await latestEventByType('agent.end')).data.messages).toBeUndefined();
+  });
+
+  it('broadcasts compaction lifecycle hooks from plugin typed hooks', async () => {
+    await api.triggerTypedHook(
+      'before_compaction',
+      {
+        messageCount: 42,
+        compactingCount: 20,
+        tokenCount: 3000,
+        messages: [{ role: 'user', content: 'Hello' }],
+        sessionFile: '/tmp/session.jsonl',
+      },
+      { agentId: 'samantha', sessionId: 'compact-session-1', sessionKey: 'compact-session-1', runId: 'run-compact-1' },
+    );
+    await api.triggerTypedHook(
+      'after_compaction',
+      {
+        messageCount: 12,
+        compactedCount: 30,
+        tokenCount: 1100,
+        sessionFile: '/tmp/session.jsonl',
+      },
+      { agentId: 'samantha', sessionId: 'compact-session-1', sessionKey: 'compact-session-1', runId: 'run-compact-1' },
+    );
+    await waitForEvents(2);
+
+    expect((await latestEventByType('session.before_compaction')).eventName).toBe('before_compaction');
+    expect((await latestEventByType('session.before_compaction')).data.messages).toBeUndefined();
+    expect((await latestEventByType('session.after_compaction')).data.compactedCount).toBe(30);
+  });
+
+  it('emits full lifecycle payloads when privacy mode is explicitly enabled', async () => {
+    await plugin.deactivate();
+    api = new MockOpenClawApi();
+    api.config = {
+      transport: {
+        mode: 'owner',
+      },
+      queue: {
+        flushIntervalMs: 100,
+      },
+      privacy: {
+        payloadMode: 'full',
+      },
+    };
+    plugin = createPlugin();
+    plugin.activate(api);
+
+    await api.triggerTypedHook(
+      'llm_input',
+      {
+        runId: 'run-privacy-full',
+        sessionId: 'session-privacy-full',
+        provider: 'openai',
+        model: 'gpt-5',
+        prompt: 'Summarize the thread.',
+        historyMessages: [{ role: 'user', content: 'Hello' }],
+        imagesCount: 0,
+        systemPrompt: 'Be concise.',
+      },
+      { agentId: 'samantha', sessionId: 'session-privacy-full', sessionKey: 'session-privacy-full', runId: 'run-privacy-full' },
+    );
+    await api.triggerTypedHook(
+      'agent_end',
+      { messages: [{ role: 'assistant', content: 'Summary complete.' }], success: true, durationMs: 3210 },
+      { agentId: 'samantha', sessionId: 'session-privacy-full', sessionKey: 'session-privacy-full', runId: 'run-privacy-full' },
+    );
+    await waitForEvents(2);
+
+    expect((await latestEventByType('agent.llm_input')).data.prompt).toBe('Summarize the thread.');
+    expect((await latestEventByType('agent.end')).data.messages).toEqual([
+      { role: 'assistant', content: 'Summary complete.' },
+    ]);
+  });
+
   it('broadcasts subagent lifecycle and synthetic agent.sub_agent_spawn', async () => {
     await api.triggerTypedHook(
       'subagent_spawning',

@@ -17,6 +17,20 @@ describe('validateConfig', () => {
     expect(result.errors).toHaveLength(0);
   });
 
+  it('should detect invalid modern lifecycle privacy mode', () => {
+    const config: PluginConfig = {
+      ...DEFAULT_CONFIG,
+      privacy: {
+        payloadMode: 'raw' as 'metadata' | 'full',
+      },
+    };
+
+    const result = validateConfig(config);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('Privacy payloadMode must be metadata or full');
+  });
+
   it('should detect invalid transport config', () => {
     const config: PluginConfig = {
       ...DEFAULT_CONFIG,

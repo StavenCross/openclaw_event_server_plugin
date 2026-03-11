@@ -17,6 +17,7 @@ import {
 } from './config';
 import { stopBroadcastServer, startBroadcastServer } from './broadcast/websocketServer';
 import { AgentStatusReducer } from './hooks/status-reducer';
+import { AgentRunTracker } from './hooks/agent-run-tracker';
 import { SubagentTracker } from './hooks/subagent-tracker';
 import { SessionTracker } from './hooks/session-hooks';
 import { ToolCallTracker } from './hooks/tool-hooks';
@@ -64,6 +65,7 @@ export function createPlugin() {
     pendingToolCalls: new Map<string, PendingToolCall>(),
     pendingToolCallsByContext: new WeakMap<object, PendingToolCall>(),
     sessionTracker: new SessionTracker(),
+    agentRunTracker: new AgentRunTracker(),
     statusReducer: new AgentStatusReducer(),
     subagentTracker: new SubagentTracker(),
     eventFileLogger: undefined,
@@ -127,6 +129,7 @@ export function createPlugin() {
     state.pendingToolCalls.clear();
     state.pendingToolCallsByContext = new WeakMap<object, PendingToolCall>();
     state.sessionTracker.clear();
+    state.agentRunTracker.clear();
     state.statusReducer.clear();
     state.subagentTracker.clear();
     state.runtimeKind = 'unknown';

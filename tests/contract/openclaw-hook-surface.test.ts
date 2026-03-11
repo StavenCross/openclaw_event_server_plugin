@@ -12,7 +12,7 @@ interface HookSurfaceFixture {
 
 function readFixture(): HookSurfaceFixture {
   const raw = readFileSync(
-    join(__dirname, '../fixtures/openclaw-hook-surface.v7b5e64.json'),
+    join(__dirname, '../fixtures/openclaw-hook-surface.v3caab92.json'),
     'utf8',
   );
   return JSON.parse(raw) as HookSurfaceFixture;
@@ -33,7 +33,7 @@ describe('OpenClaw hook surface contract', () => {
   });
 
   it('pins expected runtime hook names from OpenClaw commit fixture', () => {
-    expect(fixture.openclawCommit).toBe('7b5e64ef2e369258e2a4a613b7a62db3c21e5160');
+    expect(fixture.openclawCommit).toBe('3caab924d0d7c2e0d6e5e4fb2e9a4b7a3a7d1d7f');
     expect(fixture.internalHooks).toEqual(
       expect.arrayContaining([
         'message:received',
@@ -52,6 +52,13 @@ describe('OpenClaw hook surface contract', () => {
     );
     expect(fixture.pluginHooks).toEqual(
       expect.arrayContaining([
+        'before_model_resolve',
+        'before_prompt_build',
+        'llm_input',
+        'llm_output',
+        'agent_end',
+        'before_compaction',
+        'after_compaction',
         'before_tool_call',
         'after_tool_call',
         'tool_result_persist',

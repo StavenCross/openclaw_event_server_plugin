@@ -1,3 +1,5 @@
+import { registerAgentRunHooks } from './register-agent-run-hooks';
+import { registerCompactionHooks } from './register-compaction-hooks';
 import { registerGatewayTypedHooks } from './register-gateway-hooks';
 import { registerSessionHooks } from './register-session-hooks';
 import { registerSubagentHooks } from './register-subagent-hooks';
@@ -12,6 +14,8 @@ export interface TypedHookDeps {
 }
 
 export function registerTypedHooks(api: OpenClawPluginApi, deps: TypedHookDeps): void {
+  registerAgentRunHooks(api, deps);
+  registerCompactionHooks(api, deps);
   registerToolHooks(api, deps);
   registerSessionHooks(api, deps);
   registerSubagentHooks(api, deps);

@@ -148,12 +148,19 @@
                 "command.stop",
                 "session.start",
                 "session.end",
+                "session.before_compaction",
+                "session.after_compaction",
                 "subagent.spawning",
                 "subagent.spawned",
                 "subagent.ended",
                 "subagent.idle",
                 "agent.bootstrap",
                 "agent.error",
+                "agent.before_model_resolve",
+                "agent.before_prompt_build",
+                "agent.llm_input",
+                "agent.llm_output",
+                "agent.end",
                 "agent.session_start",
                 "agent.session_end",
                 "agent.sub_agent_spawn",
@@ -192,12 +199,19 @@
                 "command.stop",
                 "session.start",
                 "session.end",
+                "session.before_compaction",
+                "session.after_compaction",
                 "subagent.spawning",
                 "subagent.spawned",
                 "subagent.ended",
                 "subagent.idle",
                 "agent.bootstrap",
                 "agent.error",
+                "agent.before_model_resolve",
+                "agent.before_prompt_build",
+                "agent.llm_input",
+                "agent.llm_output",
+                "agent.end",
                 "agent.session_start",
                 "agent.session_end",
                 "agent.sub_agent_spawn",
@@ -280,6 +294,18 @@
           "persistPath": {
             "type": "string",
             "description": "Path for queue persistence"
+          }
+        }
+      },
+      "privacy": {
+        "type": "object",
+        "description": "Privacy controls for modern lifecycle hook payloads",
+        "properties": {
+          "payloadMode": {
+            "type": "string",
+            "enum": ["metadata", "full"],
+            "default": "metadata",
+            "description": "Emit metadata-only lifecycle payloads by default, or opt into full raw prompt/model content"
           }
         }
       },

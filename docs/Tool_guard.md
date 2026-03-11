@@ -4,6 +4,16 @@ Tool Guard is a synchronous policy layer executed during `before_tool_call`. It 
 
 This is implemented through `hookBridge.toolGuard` and evaluated in `register-tool-hooks.ts`.
 
+It does not run for `before_model_resolve`, `before_prompt_build`, `llm_input`,
+`llm_output`, `agent_end`, `before_compaction`, or `after_compaction`. Those
+hooks still flow into Hook Bridge as normal canonical events, but they are
+observability/automation signals rather than synchronous tool-execution
+decision points.
+
+This is an intentional scope boundary, not a missing implementation. If policy
+enforcement is ever needed for prompt/model hooks, that should ship as a new
+non-tool guard subsystem instead of overloading `toolGuard`.
+
 ## Execution Model
 
 For each tool call:

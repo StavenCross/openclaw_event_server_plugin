@@ -1,6 +1,7 @@
 import { EventQueue } from '../broadcast';
 import { PluginConfig } from '../config';
 import { AgentStatusReducer } from '../hooks/status-reducer';
+import { AgentRunTracker } from '../hooks/agent-run-tracker';
 import { SubagentTracker } from '../hooks/subagent-tracker';
 import { SessionTracker } from '../hooks/session-hooks';
 import { ToolCallTracker } from '../hooks/tool-hooks';
@@ -70,6 +71,7 @@ export interface PluginState {
   pendingToolCalls: Map<string, PendingToolCall>;
   pendingToolCallsByContext: WeakMap<object, PendingToolCall>;
   sessionTracker: SessionTracker;
+  agentRunTracker: AgentRunTracker;
   statusReducer: AgentStatusReducer;
   subagentTracker: SubagentTracker;
   eventFileLogger?: EventFileLogger;

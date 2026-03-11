@@ -1,5 +1,126 @@
 # Changelog
 
+## 1.2.0 - 2026-03-11
+
+This release expands the plugin from basic session/tool lifecycle coverage into
+full modern OpenClaw run lifecycle coverage. It adds canonical events for model
+resolution, prompt construction, model input/output, agent completion, and
+session compaction while introducing a safer default privacy posture for those
+new payloads.
+
+### Highlights
+
+- Added canonical event coverage for the modern OpenClaw typed hooks:
+  - `agent.before_model_resolve`
+  - `agent.before_prompt_build`
+  - `agent.llm_input`
+  - `agent.llm_output`
+  - `agent.end`
+  - `session.before_compaction`
+  - `session.after_compaction`
+- Added `privacy.payloadMode` with a metadata-first default so raw prompts,
+  transcript messages, and assistant output are not broadcast unless operators
+  explicitly opt into `full`.
+- Extended Hook Bridge compatibility so the new agent/session lifecycle events
+  can be matched with the same `eventType`, identity, and `data.*` selectors as
+  the existing canonical event families.
+- Hardened release engineering with a dedicated Node 20 release-lane preflight
+  that mirrors the real publishing toolchain and GitHub Actions install path.
+
+### Modern Lifecycle Coverage
+
+- Added typed-hook registration and canonical event builders for the modern
+  OpenClaw run hooks.
+- Preserved stable canonical naming so downstream consumers can reason about
+  the lifecycle without scraping raw gateway debug logs.
+- Kept compaction events in the `session.*` family because the session
+  transcript is the thing being compacted, while still preserving the acting
+  `agentId` when available.
+- Added a short-lived run tracker so `agent.llm_input` can emit derived audit
+  fields such as:
+  - `promptChangedFromBeforePromptBuild`
+  - `promptLengthDeltaFromBeforePromptBuild`
+  - `promptLengthDeltaFromBeforeModelResolve`
+  - `historyMessageCountDeltaFromBeforePromptBuild`
+- Fixed the tracker correlation path so those derived audit fields still work
+  when OpenClaw omits an upstream `runId` but session identity is present.
+
+### Privacy And Operator Safety
+
+- Added `privacy.payloadMode=metadata|full` to the public config surface,
+  environment loader, schema validation, and plugin manifest.
+- Defaulted the modern lifecycle hooks to metadata-only payloads:
+  - prompt lengths instead of prompt bodies
+  - message counts and role summaries instead of transcript arrays
+  - assistant text counts and lengths instead of assistant text content
+- Preserved an explicit opt-in `full` mode for controlled debugging and
+  observability workflows that truly need raw upstream payloads.
+- Clarified that Tool Guard remains intentionally scoped to synchronous
+  `before_tool_call` evaluation; prompt/model/compaction hooks are observable to
+  Hook Bridge but are not part of Tool Guard enforcement.
+- Documented that raw gateway debug logs can expose sensitive plugin config and
+  should be treated as short-lived diagnostic artifacts.
+
+### Release And Verification Improvements
+
+- Added `npm run verify:release-lane`, which switches to the repo-pinned
+  release toolchain, refreshes dependencies with `npm ci`, and runs the shared
+  CI-style verification flow.
+- Added `scripts/release-node-env.sh` so the release path and the manual
+  preflight path share the same Node/npm selection logic.
+- Simplified `scripts/release.sh` to reuse the release-lane toolchain helper
+  and shared verification command instead of duplicating local toolchain logic.
+- Corrected compatibility references so docs point to the current pinned
+  OpenClaw hook-surface fixture.
+
+### Testing And Documentation
+
+- Added focused unit coverage for:
+  - modern lifecycle typed hook registration
+  - compaction hook registration
+  - privacy mode shaping (`metadata` vs `full`)
+  - Hook Bridge matching for the new lifecycle events
+  - run-tracker behavior when `runId` is absent
+- Added integration coverage for:
+  - end-to-end emission of the modern lifecycle events
+  - compaction event broadcasting
+  - explicit full-payload opt-in behavior
+- Updated documentation across:
+  - `README.md`
+  - `docs/api.md`
+  - `docs/events.md`
+  - `docs/backend.md`
+  - `docs/testing.md`
+  - `docs/Tool_guard.md`
+
+### Breaking Changes
+
+- None.
+
+### Upgrade Notes
+
+- No config migration is required for existing installs.
+- If you want raw prompt/model/transcript content for the new lifecycle hooks,
+  set `privacy.payloadMode: "full"` or
+  `EVENT_PLUGIN_MODERN_LIFECYCLE_PAYLOAD_MODE=full`.
+- If you do nothing, the new lifecycle hooks emit metadata-only payloads by
+  default.
+- Release preparation should continue to use the pinned release lane:
+  - `npm run verify:release-lane`
+
+### Validation
+
+Validated on the release-prep state with:
+
+- `npm run verify:release-lane`
+
+Result:
+
+- Node `v20.20.0`
+- 43 test suites passed
+- 285 tests passed
+- coverage thresholds passed
+
 ## 1.1.1 - 2026-03-07
 
 Published release for the March 7 feature set. `1.1.0` was intentionally skipped during release testing, so `1.1.1` carries the full feature notes plus the final CI-stability adjustment used for the public release.
