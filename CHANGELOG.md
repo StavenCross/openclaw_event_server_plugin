@@ -1,5 +1,158 @@
 # Changelog
 
+## Unreleased
+
+- No unreleased changes.
+
+## 1.3.0 - 2026-03-14
+
+This release hardens long-lived runtime behavior and improves downstream
+correlation by carrying additive session provenance into tool lifecycle events.
+It also makes repeated in-process activation safe for embedded runtimes, adds a
+Hook Bridge subagent-completion notifier example, and reduces noisy transport
+recovery retries when another healthy runtime already owns the relay lane.
+
+### Highlights
+
+- Added additive `data.provenance` metadata for tool lifecycle events so
+  downstream consumers can inspect resolved session refs, alias history, route
+  metadata, and ambiguity status without changing the canonical top-level event
+  envelope.
+- Kept repeated `activate()` calls in the same process safe by reusing the
+  active runtime state and re-binding hooks onto the new plugin registry.
+- Hardened session and lifecycle tracking so fallback session refs still
+  resolve correctly before cleanup and event emission.
+- Reduced live-owner transport contention noise with smarter owner-recovery
+  backoff and duplicate-log suppression.
+- Added a Hook Bridge local-script example that notifies parent sessions when a
+  subagent completes, plus Python tests and usage docs.
+
+### Tool Provenance And Session Tracking
+
+- Added a dedicated session tracker implementation that preserves:
+  - alias session IDs and session keys
+  - parsed session-key metadata
+  - route/message observations
+  - run-based disambiguation
+- Added `data.provenance` support across:
+  - `tool.called`
+  - `tool.guard.matched`
+  - `tool.guard.allowed`
+  - `tool.completed`
+  - `tool.error`
+  - `tool.result_persist`
+- Added provenance fields for:
+  - resolved session identity and winning source
+  - raw hook/context session-ref candidates
+  - correlation IDs, `runId`, and `toolCallId`
+  - parent/subagent lineage
+  - generic route/message fields such as `provider`, `surface`,
+    `conversationId`, and `threadId`
+  - alias snapshots and `routeResolution`
+- Kept ambiguous shared runtime aliases conservative: when one alias matches
+  multiple live sessions and no stronger identifier breaks the tie, the plugin
+  omits flattened route fields instead of guessing.
+- Enriched message and lifecycle observations so later tool events can inherit
+  route provenance already seen on related sessions.
+
+### Runtime And Lifecycle Fixes
+
+- Changed repeated plugin activation from a hard error into a safe rebind path
+  for long-lived gateway runtimes that rebuild plugin registries in-process.
+- Preserved tool hook registration after repeated activation so embedded agent
+  turns do not lose:
+  - `before_tool_call`
+  - `after_tool_call`
+  - `tool_result_persist`
+- Kept `session_start` and `session_end` on the shared session-ref resolution
+  path so cleanup and emission stay aligned even when only fallback refs are
+  available.
+- Added explicit fallback-resolution coverage for `session_end` events that
+  arrive with session identity only under nested hook context fields.
+
+### Transport Recovery Improvements
+
+- Changed transport lock acquisition to return structured outcomes for:
+  - healthy live owner
+  - busy non-stale lock
+  - reclaimable stale/dead owner
+  - unexpected lock errors
+- Reduced owner-recovery log spam when another healthy runtime already owns the
+  transport lock.
+- Changed live-owner lock contention to back off on the heartbeat/staleness
+  cadence instead of retrying on the shortest reconnect interval.
+- Kept automatic promotion behavior so a waiting owner still takes over quickly
+  once the active owner exits or its lock becomes stale.
+- Split transport-manager internals into helper modules so the implementation
+  stays within the repository file-size limit without changing runtime
+  behavior.
+
+### Hook Bridge Script Example
+
+- Added `scripts/subagent_completion_notifier.py`, a local Hook Bridge action
+  that injects a completion notification into the parent session when a
+  subagent finishes.
+- Added `scripts/test_subagent_completion_notifier.py` with unit coverage for:
+  - stdin parsing
+  - parent-session extraction
+  - HMAC secret lookup
+  - request signing
+  - Gateway request behavior
+  - main-flow success and failure cases
+- Added `scripts/README.md` and
+  `examples/hook-bridge-subagent-notifier.example.json` so operators have a
+  ready-to-copy configuration example.
+
+### Documentation And Testing
+
+- Updated:
+  - `README.md`
+  - `docs/README.md`
+  - `docs/api.md`
+  - `docs/backend.md`
+  - `docs/events.md`
+  - `docs/hookbridge.md`
+  - `docs/testing.md`
+  - `docs/transport.md`
+- Added regression coverage for:
+  - repeated activation and transport reuse
+  - fallback session-ref precedence
+  - tool provenance flow and ambiguous alias handling
+  - live-owner contention backoff
+  - duplicate contention-log suppression
+  - waiting-owner promotion after owner shutdown
+  - Hook Bridge notifier script behavior
+
+### Breaking Changes
+
+- None.
+
+### Upgrade Notes
+
+- No config migration is required for existing installs.
+- Treat `data.provenance` as additive metadata, not as a replacement for
+  top-level event identity fields.
+- Respect `routeResolution`:
+  - `resolved` means one logical session record won resolution
+  - `ambiguous` means the plugin intentionally withheld route/thread fields
+  - `unavailable` means no safe route enrichment was observed
+- Repeated activation in the same process is now expected and may log the
+  runtime-state reuse warning once per rebind.
+
+### Validation
+
+- `npm run verify:release-lane`
+- `python3 scripts/test_subagent_completion_notifier.py`
+
+Result:
+
+- Node `v20.20.0`
+- npm `10.8.2`
+- 46 Jest test suites passed
+- 299 Jest tests passed
+- coverage thresholds passed
+- 39 Python tests passed
+
 ## 1.2.0 - 2026-03-11
 
 This release expands the plugin from basic session/tool lifecycle coverage into
@@ -72,6 +225,12 @@ new payloads.
   and shared verification command instead of duplicating local toolchain logic.
 - Corrected compatibility references so docs point to the current pinned
   OpenClaw hook-surface fixture.
+- Fixed repeated in-process plugin activation so embedded non-main agent turns
+  can rebuild a plugin registry without dropping `before_tool_call`,
+  `after_tool_call`, and `tool_result_persist` hooks.
+- Added regression coverage for the real gateway failure mode: calling
+  `activate()` again in the same process now preserves tool hook emission on the
+  new registry instead of failing registration.
 
 ### Testing And Documentation
 

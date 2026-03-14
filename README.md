@@ -89,6 +89,12 @@ Important deployment note:
 
 This keeps ownership predictable: gateway publishes the public event stream, all other runtimes remain local event producers.
 
+Embedded runtime note:
+
+- OpenClaw can rebuild plugin registries multiple times inside the same long-lived gateway process.
+- The plugin now treats repeated `activate()` calls as a normal lifecycle event: it keeps the active transport/runtime state and re-binds hooks into the new registry.
+- If you see `Plugin already activated; reusing active runtime state and binding hooks to the new plugin registry`, that is expected and prevents non-main embedded agents from losing tool hook emission.
+
 ## For Developers
 
 ```bash

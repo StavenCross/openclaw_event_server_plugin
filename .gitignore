@@ -4,6 +4,8 @@ dist/
 *.tgz
 npm-debug.log*
 .DS_Store
+__pycache__/
+*.pyc
 .event-plugin-queue.json
 .event-plugin-hmac.secret
 .event-server/

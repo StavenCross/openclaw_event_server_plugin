@@ -1,4 +1,5 @@
 import { createSessionEndEvent, createSessionStartEvent } from '../hooks/session-hooks';
+import { observeSessionProvenance } from './provenance';
 import type { OpenClawPluginApi } from './types';
 import type { TypedHookDeps } from './typed-hooks';
 import {
@@ -7,6 +8,7 @@ import {
   readString,
   registerTypedHook,
   resolveAgentId,
+  resolveSessionRefs,
   resolveSessionRefForStatus,
   toContext,
 } from './utils';
@@ -22,22 +24,26 @@ export function registerSessionHooks(api: OpenClawPluginApi, deps: TypedHookDeps
     async (rawEvent, rawCtx) => {
       const raw = isRecord(rawEvent) ? rawEvent : {};
       const ctx = toContext(rawCtx);
-      const sessionId = readString(raw.sessionId) ?? readString(ctx?.sessionId);
+      const sessionRefs = resolveSessionRefs(raw, ctx);
+      const sessionId = sessionRefs.sessionId ?? readString(raw.sessionId) ?? readString(ctx?.sessionId);
       if (!sessionId) {
         return;
       }
-      const sessionKey = readString(raw.sessionKey) ?? readString(ctx?.sessionKey);
+      const sessionKey = sessionRefs.sessionKey ?? readString(raw.sessionKey) ?? readString(ctx?.sessionKey);
       const agentId = resolveAgentId({
         sessionTracker: state.sessionTracker,
         hookEvent: raw,
         ctx,
-        sessionRefs: { sessionId, sessionKey },
+        sessionRefs: { ...sessionRefs, sessionId, sessionKey },
       });
 
-      state.sessionTracker.startSession({
-        sessionId,
-        sessionKey,
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs: { ...sessionRefs, sessionId, sessionKey },
+        hookEvent: raw,
+        ctx,
         agentId,
+        direction: 'internal',
       });
       const event = createSessionStartEvent({
         sessionId,
@@ -66,11 +72,12 @@ export function registerSessionHooks(api: OpenClawPluginApi, deps: TypedHookDeps
     async (rawEvent, rawCtx) => {
       const raw = isRecord(rawEvent) ? rawEvent : {};
       const ctx = toContext(rawCtx);
-      const sessionId = readString(raw.sessionId) ?? readString(ctx?.sessionId);
+      const sessionRefs = resolveSessionRefs(raw, ctx);
+      const sessionId = sessionRefs.sessionId ?? readString(raw.sessionId) ?? readString(ctx?.sessionId);
       if (!sessionId) {
         return;
       }
-      const sessionKey = readString(raw.sessionKey) ?? readString(ctx?.sessionKey);
+      const sessionKey = sessionRefs.sessionKey ?? readString(raw.sessionKey) ?? readString(ctx?.sessionKey);
       const ended =
         state.sessionTracker.endSession(sessionId) ??
         state.sessionTracker.endSession(sessionKey ?? '');
@@ -80,7 +87,7 @@ export function registerSessionHooks(api: OpenClawPluginApi, deps: TypedHookDeps
           sessionTracker: state.sessionTracker,
           hookEvent: raw,
           ctx,
-          sessionRefs: { sessionId, sessionKey },
+          sessionRefs: { ...sessionRefs, sessionId, sessionKey },
         });
 
       if (agentId) {

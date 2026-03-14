@@ -12,6 +12,7 @@ import {
 } from '../hooks/agent-hooks';
 import { createGatewayStartupEvent } from '../hooks/gateway-hooks';
 import { PluginState } from './types';
+import { observeSessionProvenance } from './provenance';
 import { RuntimeEventOps } from './runtime-events';
 import {
   classifyAgentError,
@@ -41,6 +42,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
     const raw = isRecord(hookEvent) ? hookEvent : undefined;
     const sessionRefs = resolveSessionRefs(raw);
     const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, sessionRefs });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'inbound',
+    });
     await ops.emitAgentActivity({
       agentId,
       sessionId: event.sessionId ?? sessionRefs.sessionId,
@@ -62,6 +70,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
     const raw = isRecord(hookEvent) ? hookEvent : undefined;
     const sessionRefs = resolveSessionRefs(raw);
     const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, sessionRefs });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'inbound',
+    });
     await ops.emitAgentActivity({
       agentId,
       sessionId: event.sessionId ?? sessionRefs.sessionId,
@@ -83,6 +98,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
     const raw = isRecord(hookEvent) ? hookEvent : undefined;
     const sessionRefs = resolveSessionRefs(raw);
     const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, sessionRefs });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'inbound',
+    });
     await ops.emitAgentActivity({
       agentId,
       sessionId: event.sessionId ?? sessionRefs.sessionId,
@@ -104,6 +126,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
     const raw = isRecord(hookEvent) ? hookEvent : undefined;
     const sessionRefs = resolveSessionRefs(raw);
     const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, sessionRefs });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'outbound',
+    });
     await ops.emitAgentActivity({
       agentId,
       sessionId: event.sessionId ?? sessionRefs.sessionId,
@@ -135,6 +164,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
       senderId: readString(context.senderId),
       data: context,
     });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'internal',
+    });
     await ops.broadcastEvent(commandEvent);
 
     if (!agentId) {
@@ -162,6 +198,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
       sessionKey: sessionRefs.sessionKey,
       agentId,
       data: context,
+    });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'internal',
     });
     await ops.broadcastEvent(bootstrapEvent);
 
@@ -198,6 +241,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
       stack: readString(context.stack) ?? readString(raw.stack),
       data: context,
     });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'internal',
+    });
     await ops.broadcastEvent(errorEvent);
 
     if (!agentId) {
@@ -228,6 +278,13 @@ export function createInternalHandlers(deps: InternalHandlersDeps) {
       sessionKey: sessionRefs.sessionKey,
       agentId,
       data: context,
+    });
+    observeSessionProvenance({
+      sessionTracker: state.sessionTracker,
+      sessionRefs,
+      hookEvent: raw,
+      agentId,
+      direction: 'internal',
     });
     await ops.broadcastEvent(event);
 

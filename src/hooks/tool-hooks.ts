@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 export function createToolCalledEvent(context: {
   toolName: string;
   params?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
   agentId?: string;
   parentAgentId?: string;
   subagentKey?: string;
@@ -37,6 +38,7 @@ export function createToolCalledEvent(context: {
     data: {
       toolName: context.toolName,
       params: context.params,
+      provenance: context.provenance,
       agentId: context.agentId,
       parentAgentId: context.parentAgentId,
       subagentKey: context.subagentKey,
@@ -53,6 +55,7 @@ export function createToolCompletedEvent(context: {
   toolName: string;
   result?: unknown;
   durationMs?: number;
+  provenance?: Record<string, unknown>;
   agentId?: string;
   parentAgentId?: string;
   subagentKey?: string;
@@ -79,6 +82,7 @@ export function createToolCompletedEvent(context: {
     data: {
       toolName: context.toolName,
       durationMs: context.durationMs,
+      provenance: context.provenance,
       agentId: context.agentId,
       parentAgentId: context.parentAgentId,
       subagentKey: context.subagentKey,
@@ -93,6 +97,7 @@ export function createToolGuardEvent(context: {
   type: 'tool.guard.matched' | 'tool.guard.allowed' | 'tool.guard.blocked';
   toolName: string;
   params?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
   blockReason?: string;
   matchedRuleId?: string;
   matchedActionId?: string;
@@ -122,6 +127,7 @@ export function createToolGuardEvent(context: {
     data: {
       toolName: context.toolName,
       params: context.params,
+      provenance: context.provenance,
       blockReason: context.blockReason,
       matchedRuleId: context.matchedRuleId,
       matchedActionId: context.matchedActionId,
@@ -143,6 +149,7 @@ export function createToolErrorEvent(context: {
   error: string;
   stackTrace?: string;
   params?: Record<string, unknown>;
+  provenance?: Record<string, unknown>;
   agentId?: string;
   parentAgentId?: string;
   subagentKey?: string;
@@ -173,6 +180,7 @@ export function createToolErrorEvent(context: {
     data: {
       toolName: context.toolName,
       params: context.params,
+      provenance: context.provenance,
       agentId: context.agentId,
       parentAgentId: context.parentAgentId,
       subagentKey: context.subagentKey,
@@ -192,6 +200,7 @@ export function createToolResultPersistEvent(context: {
   toolCallId?: string;
   message?: unknown;
   isSynthetic?: boolean;
+  provenance?: Record<string, unknown>;
   agentId?: string;
   parentAgentId?: string;
   subagentKey?: string;
@@ -216,6 +225,7 @@ export function createToolResultPersistEvent(context: {
       toolCallId: context.toolCallId,
       message: context.message,
       isSynthetic: context.isSynthetic,
+      provenance: context.provenance,
       agentId: context.agentId,
       parentAgentId: context.parentAgentId,
       subagentKey: context.subagentKey,

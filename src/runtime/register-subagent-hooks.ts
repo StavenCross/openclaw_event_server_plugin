@@ -155,6 +155,12 @@ export function registerSubagentHooks(api: OpenClawPluginApi, deps: TypedHookDep
         readString(raw.agentId);
       const childSessionKey = readString(raw.targetSessionKey) ?? readString(raw.childSessionKey);
 
+      // Look up parent session info from the tracker (registered during spawn)
+      const subagentRecord = childSessionKey ? state.subagentTracker.getByChildSessionKey(childSessionKey) : undefined;
+      const parentAgentId = subagentRecord?.parentAgentId ?? agentId;
+      const parentSessionId = subagentRecord?.parentSessionId ?? sessionRefs.sessionId;
+      const parentSessionKey = subagentRecord?.parentSessionKey ?? sessionRefs.sessionKey;
+
       const event = createSubagentEndedEvent({
         agentId,
         sessionId: sessionRefs.sessionId,
@@ -164,9 +170,9 @@ export function registerSubagentHooks(api: OpenClawPluginApi, deps: TypedHookDep
         endReason: normalizeSubagentEndReason(readString(raw.reason)),
         data: {
           ...raw,
-          parentAgentId: agentId,
-          parentSessionId: sessionRefs.sessionId,
-          parentSessionKey: sessionRefs.sessionKey,
+          parentAgentId,
+          parentSessionId,
+          parentSessionKey,
           childAgentId: readString(raw.agentId),
           childSessionKey,
         },

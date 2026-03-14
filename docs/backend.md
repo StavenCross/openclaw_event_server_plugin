@@ -50,11 +50,16 @@ The typical pipeline for an event:
 
 - `toolTracker`: in-flight tool calls for duration/correlation
 - `pendingToolCalls`/`pendingToolCallsByContext`: map before/after tool hooks
-- `sessionTracker`: session/agent identity mapping
+- `sessionTracker`: session/agent identity mapping, alias history, parsed session-key metadata, and last-known generic route/message provenance used to enrich tool events
 - `statusReducer`: synthetic `agent.status` transitions
 - `subagentTracker`: subagent spawn/idle transitions
 - `transportManager`: current ownership role and relay
 - `hookBridge`: rules engine for async actions + tool guard
+
+The session tracker deliberately treats weak runtime aliases like
+`agent:<agentId>:main` as unsafe on their own. It only flattens route/thread
+metadata onto tool events when one logical session record wins resolution, often
+because a stronger thread-scoped alias or matching `runId` was observed earlier.
 
 ## Synthetic Events
 
@@ -85,6 +90,11 @@ synchronous `before_tool_call` decision point.
 The plugin also keeps a short-lived agent-run tracker so `llm_input` can expose
 derived audit fields such as prompt-length deltas and history-count deltas
 without relying on raw prompt bodies in the default payload mode.
+
+Tool hooks also feed session provenance back into the tracker. That lets later
+tool events carry additive `data.provenance` diagnostics such as
+`resolvedSessionSource`, alias history, and `routeResolution` without coupling
+the backend to any specific downstream consumer.
 
 ## Reliability Model
 

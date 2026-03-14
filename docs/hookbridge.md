@@ -126,6 +126,14 @@ To create event hooks with Hook Bridge:
 }
 ```
 
+For tool provenance-aware rules, prefer matching on
+`data.provenance.routeResolution == "resolved"` plus specific
+`data.provenance.threadId` or `data.provenance.conversationId` values when
+thread ownership matters. Do not key actions only on `agentId` or shared
+runtime aliases such as `agent:<agentId>:main`, because the plugin
+intentionally treats those as ambiguous when multiple active sessions share
+them.
+
 ## Operational Controls
 
 - `enabled`: global bridge switch

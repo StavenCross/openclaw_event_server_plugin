@@ -32,6 +32,31 @@ Every emitted event uses this envelope (`OpenClawEvent`):
 - `data: Record<string, unknown>`
 - `metadata?: Record<string, unknown>`
 
+## Tool Provenance Metadata
+
+Tool lifecycle events may include an additive `data.provenance` object. This is
+plugin-owned metadata that helps downstream consumers correlate runtime tool
+events without changing the canonical top-level envelope fields.
+
+`data.provenance` can include:
+
+- identity resolution: `resolvedSessionId`, `resolvedSessionKey`, `resolvedSessionSource`
+- raw candidate session refs: `hookEventSessionId`, `hookEventSessionKey`, `hookEventContextSessionId`, `hookEventContextSessionKey`, `ctxSessionId`, `ctxSessionKey`
+- correlation fields: `runId`, `toolCallId`, `correlationId`
+- parent/subagent lineage: `parentAgentId`, `parentSessionId`, `parentSessionKey`, `subagentKey`
+- generic route/message provenance: `provider`, `surface`, `accountId`, `channelId`, `conversationId`, `threadId`, `messageId`, `from`, `to`, `senderId`, `senderName`
+- alias history: `sessionAliases.sessionIds`, `sessionAliases.sessionKeys`, `sessionAliases.routeKeys`
+- parsed session-key metadata: `parsedSession`, `isThreadScoped`, `threadKind`, `threadToken`
+- route correlation status: `routeResolution` with values `resolved`, `ambiguous`, or `unavailable`
+
+Semantics:
+
+- `resolved` means the plugin linked the tool event to one logical session record and may expose route/thread fields.
+- `ambiguous` means multiple active session records matched a shared runtime alias such as `agent:<agentId>:main`; route/thread fields are intentionally omitted.
+- `unavailable` means the plugin did not observe enough route metadata for that tool event; consumers must not infer thread ownership from `agentId` or runtime alias alone.
+
+See [events.md](./events.md) for the exhaustive field list and examples.
+
 ## WebSocket API
 
 The server broadcasts all outbound canonical events to all connected clients.

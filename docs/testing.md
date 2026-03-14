@@ -82,6 +82,7 @@ Key unit suites include:
 - message hook parsing
 - status reducer + subagent tracker
 - runtime event operations and utility helpers
+- provenance resolution precedence, fallback session-ref sources, and ambiguous shared-alias handling
 - hook bridge action execution and tool guard matching/decision logic
 - modern agent lifecycle typed hook registration and canonical event mapping
 - compaction lifecycle typed hook registration and canonical event mapping
@@ -91,6 +92,9 @@ Key unit suites include:
 - transport lock reclaim when a fresh lock references a dead owner pid
 - transport recovery logging for follower relay failures and owner demotion/rebind
 - owner relay socket listening logs and live-owner lock contention diagnostics
+- live-owner lock contention backoff so waiting owners do not spam recovery logs
+- duplicate live-owner takeover-skip logs suppressed until the observed owner changes
+- waiting owner promotion after the active owner exits
 - relay socket auth/ack/error handling
 - websocket security authorization checks
 - event file logging behavior
@@ -101,6 +105,7 @@ Key unit suites include:
 Integration suites validate end-to-end plugin behavior across hooks and transport:
 
 - plugin hook mapping and lifecycle (`plugin-hooks-core`, `plugin-hooks-lifecycle`)
+- message-to-tool provenance carry-forward and concurrent shared-alias isolation
 - tool guard integration (`plugin-hooks-tool-guard`)
 - hook bridge matching for modern agent/session lifecycle events (currently covered in focused unit tests)
 - explicit opt-in tests for full lifecycle payload mode

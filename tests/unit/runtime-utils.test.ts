@@ -61,12 +61,23 @@ describe('runtime utils', () => {
     const refs = resolveSessionRefs(
       {
         sessionId: 'session-1',
+        sessionKey: 'session-key-hook',
         context: { sessionKey: 'session-key-1' },
       },
-      { sessionKey: 'session-key-ctx' },
+      { sessionId: 'session-id-ctx', sessionKey: 'session-key-ctx' },
     );
-    expect(refs.sessionId).toBe('session-1');
+    expect(refs.sessionId).toBe('session-id-ctx');
     expect(refs.sessionKey).toBe('session-key-ctx');
+    expect(refs.sessionIdSource).toBe('ctx.sessionId');
+    expect(refs.sessionKeySource).toBe('ctx.sessionKey');
+    expect(refs.resolvedSessionSource).toBe('ctx.sessionKey');
+    expect(refs.candidates).toMatchObject({
+      hookEventSessionId: 'session-1',
+      hookEventSessionKey: 'session-key-hook',
+      hookEventContextSessionKey: 'session-key-1',
+      ctxSessionId: 'session-id-ctx',
+      ctxSessionKey: 'session-key-ctx',
+    });
 
     const tracker = new SessionTracker();
     tracker.startSession({ sessionId: 'session-2', sessionKey: 'session-key-2', agentId: 'agent-2' });
@@ -84,6 +95,60 @@ describe('runtime utils', () => {
       sessionRefs: { sessionId: 'session-2' },
     });
     expect(fromTracker).toBe('agent-2');
+  });
+
+  it('falls back from sessionKey candidates when only session keys are present', () => {
+    const refs = resolveSessionRefs(
+      {
+        sessionKey: 'agent:jacob:main',
+        context: {
+          sessionKey: 'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+        },
+      },
+      undefined,
+    );
+
+    expect(refs.sessionId).toBe('agent:jacob:main');
+    expect(refs.sessionIdSource).toBe('hookEvent.sessionId_fallback');
+    expect(refs.sessionKey).toBe('agent:jacob:main');
+    expect(refs.sessionKeySource).toBe('hookEvent.sessionKey');
+    expect(refs.aliasSessionKeys).toEqual([
+      'agent:jacob:main',
+      'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+    ]);
+  });
+
+  it('prefers hookEvent.context session keys over weaker sessionKey fallbacks when ctx is absent', () => {
+    const refs = resolveSessionRefs({
+      sessionId: 'session-id-top-level',
+      context: {
+        sessionKey: 'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773179674.978729',
+      },
+    });
+
+    expect(refs.sessionKey).toBe(
+      'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773179674.978729',
+    );
+    expect(refs.sessionKeySource).toBe('hookEvent.context.sessionKey');
+    expect(refs.sessionId).toBe('session-id-top-level');
+    expect(refs.sessionIdSource).toBe('hookEvent.sessionId');
+    expect(refs.resolvedSessionSource).toBe('hookEvent.context.sessionKey');
+  });
+
+  it('uses ctx sessionKey as the last-resort sessionId fallback only when stronger candidates are absent', () => {
+    const refs = resolveSessionRefs({}, {
+      sessionKey: 'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+    });
+
+    expect(refs.sessionId).toBe(
+      'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+    );
+    expect(refs.sessionIdSource).toBe('ctx.sessionId_fallback');
+    expect(refs.sessionKey).toBe(
+      'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+    );
+    expect(refs.sessionKeySource).toBe('ctx.sessionKey');
+    expect(refs.resolvedSessionSource).toBe('ctx.sessionKey');
   });
 
   it('classifies offline-like agent errors', () => {

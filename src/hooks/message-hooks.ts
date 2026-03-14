@@ -39,13 +39,18 @@ function parseHook(hookEvent: unknown): ParsedHook | null {
 function buildMessageData(context: Record<string, unknown>): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   const allowedKeys = [
+    'provider',
+    'surface',
     'from',
     'to',
     'content',
     'channelId',
     'accountId',
     'conversationId',
+    'threadId',
     'messageId',
+    'senderId',
+    'senderName',
     'isGroup',
     'groupId',
     'newContent',

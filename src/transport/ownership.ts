@@ -12,8 +12,14 @@ import {
   writeNewLock,
   type LockFilePayload,
 } from './lock';
-import { logTransportInfo, logTransportWarn } from './log-context';
+import { logTransportWarn } from './log-context';
 import { type TransportRole } from './protocol';
+
+export type TransportLockAcquireResult =
+  | { acquired: true }
+  | { acquired: false; reason: 'live_owner'; existingLock: LockFilePayload }
+  | { acquired: false; reason: 'busy_lock' }
+  | { acquired: false; reason: 'error' };
 
 /**
  * Resolve the ownership lock payload that tells followers which runtime should
@@ -40,12 +46,12 @@ export function acquireTransportLock(params: {
   runtimeId: string;
   role: TransportRole;
   pendingEvents: number;
-}): boolean {
+}): TransportLockAcquireResult {
   const payload = buildLockPayload(params.runtimeId, params.config.socketPath);
 
   try {
     writeNewLock(params.config.lockPath, payload);
-    return true;
+    return { acquired: true };
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     if (err.code !== 'EEXIST') {
@@ -57,7 +63,7 @@ export function acquireTransportLock(params: {
         reason: 'lock acquisition threw a non-EEXIST error',
         error: err.message,
       });
-      return false;
+      return { acquired: false, reason: 'error' };
     }
   }
 
@@ -82,27 +88,11 @@ export function acquireTransportLock(params: {
   }
 
   if (existingLock && isProcessAlive(existingLock.pid)) {
-    logTransportInfo(
-      params.logger,
-      '[Transport] Transport lock is still owned by a live runtime; owner takeover skipped',
-      {
-        config: params.config,
-        runtimeId: params.runtimeId,
-        role: params.role,
-        pendingEvents: params.pendingEvents,
-        reason: 'existing transport owner is still alive',
-        extra: {
-          previousRuntimeId: existingLock.runtimeId,
-          previousPid: existingLock.pid,
-          previousUpdatedAt: existingLock.updatedAt,
-          lockAgeMs: Date.now() - existingLock.updatedAt,
-        },
-      },
-    );
+    return { acquired: false, reason: 'live_owner', existingLock };
   }
 
   if (!isLockStale(params.config.lockPath, params.config.lockStaleMs)) {
-    return false;
+    return { acquired: false, reason: 'busy_lock' };
   }
 
   try {
@@ -120,12 +110,12 @@ export function acquireTransportLock(params: {
         previousPid: existingLock?.pid,
       },
     });
-    return false;
+    return { acquired: false, reason: 'error' };
   }
 
   try {
     writeNewLock(params.config.lockPath, payload);
-    return true;
+    return { acquired: true };
   } catch (error) {
     logTransportWarn(params.logger, '[Transport] Failed to create transport lock after reclaiming stale owner', {
       config: params.config,
@@ -139,7 +129,7 @@ export function acquireTransportLock(params: {
         previousPid: existingLock?.pid,
       },
     });
-    return false;
+    return { acquired: false, reason: 'error' };
   }
 }
 

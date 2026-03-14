@@ -1,0 +1,49 @@
+{
+  "$schema": "../../../config.schema.json",
+  "_comment": "Example hook bridge configuration for subagent completion notifications",
+  "_usage": "Copy this into your config.json hookBridge section and adjust paths as needed",
+  
+  "hookBridge": {
+    "enabled": true,
+    "dryRun": false,
+    
+    "allowedActionDirs": [
+      "/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/scripts"
+    ],
+    
+    "localScriptDefaults": {
+      "timeoutMs": 10000,
+      "maxPayloadBytes": 65536
+    },
+    
+    "actions": {
+      "notify_parent_subagent_done": {
+        "type": "local_script",
+        "path": "/Users/cmiller/Documents/Projects/openclaw_event_server_plugin/scripts/subagent_completion_notifier.py",
+        "timeoutMs": 10000,
+        "maxPayloadBytes": 65536
+      }
+    },
+    
+    "rules": [
+      {
+        "id": "notify-parent-on-subagent-end",
+        "enabled": true,
+        "action": "notify_parent_subagent_done",
+        "cooldownMs": 0,
+        "coalesce": {
+          "enabled": false
+        },
+        "when": {
+          "eventType": ["subagent.ended", "subagent_ended"]
+        }
+      }
+    ],
+    
+    "runtime": {
+      "maxPendingEvents": 1000,
+      "concurrency": 8,
+      "dropPolicy": "drop_oldest"
+    }
+  }
+}

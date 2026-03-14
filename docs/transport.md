@@ -49,6 +49,10 @@ Behavior:
 - owner-intended runtimes (`owner` mode, plus gateway runtimes after `auto` resolution)
   retry lock acquisition and relay socket startup after transient owner failures, so a
   bad socket path no longer requires a full gateway restart to recover
+- if lock acquisition fails because a healthy live owner is still running, the
+  waiting runtime stays follower and switches to a slower recovery cadence based
+  on the heartbeat/staleness window instead of hammering retries at the base
+  reconnect backoff
 
 ## Relay Path
 
@@ -61,6 +65,9 @@ Followers send events to owner via local socket (`transport.socketPath`):
 - if the owner relay socket dies and the owner runtime is still intended to own
   transport, the owner retries in the background while followers keep their pending
   relay queue and retry delivery
+- if another live runtime already owns transport, owner-intended contenders log
+  that contention once per observed owner identity and then continue retrying
+  quietly until the owner changes, exits, or becomes stale
 
 Useful runtime log signatures to monitor:
 

@@ -84,18 +84,50 @@ describe('plugin transport role transitions', () => {
     await expect(plugin.deactivate()).resolves.toBeUndefined();
   });
 
-  it('rejects repeated activation until the current instance is deactivated', async () => {
+  it('reuses the initialized runtime state across repeated activation', async () => {
     const { createPlugin } = await import('../../src/index');
     const plugin = createPlugin();
     const api = new MockOpenClawApi();
 
     plugin.activate(api as never);
-    expect(() => plugin.activate(api as never)).toThrow(
-      'Plugin is already activated. Deactivate the current instance before reactivating.',
-    );
+    expect(() => plugin.activate(api as never)).not.toThrow();
 
     await expect(plugin.deactivate()).resolves.toBeUndefined();
     expect(() => plugin.activate(api as never)).not.toThrow();
+    await expect(plugin.deactivate()).resolves.toBeUndefined();
+  });
+
+  it('does not restart transport when activation is repeated in the same process', async () => {
+    const transportStarts: string[] = [];
+
+    jest.doMock('../../src/transport/manager', () => ({
+      TransportManager: class MockTransportManager {
+        constructor(params: { onRoleChange?: (role: 'owner' | 'follower') => void }) {
+          params.onRoleChange?.('owner');
+        }
+
+        start(): void {
+          transportStarts.push('start');
+        }
+
+        dispatch(): Promise<void> {
+          return Promise.resolve();
+        }
+
+        stop(): Promise<void> {
+          return Promise.resolve();
+        }
+      },
+    }));
+
+    const { createPlugin } = await import('../../src/index');
+    const plugin = createPlugin();
+    const api = new MockOpenClawApi();
+
+    plugin.activate(api as never);
+    plugin.activate(api as never);
+
+    expect(transportStarts).toEqual(['start']);
     await expect(plugin.deactivate()).resolves.toBeUndefined();
   });
 

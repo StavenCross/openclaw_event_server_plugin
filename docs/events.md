@@ -9,6 +9,7 @@ All event types share the same outer envelope:
 - `eventId`, `schemaVersion`, `timestamp`, `type`, `eventCategory`, `eventName`, `source`, `pluginVersion`
 - optional: `agentId`, `sessionId`, `sessionKey`, `runId`, `toolCallId`, `correlationId`, `result`, `error`, `signature`, `metadata`
 - `data` payload is type-specific
+- tool events may now include an optional additive `data.provenance` object with session alias history, route provenance, and resolution diagnostics
 
 ## Event Type Inventory
 
@@ -27,7 +28,7 @@ All event types share the same outer envelope:
 - `eventCategory`: `message`
 - `eventName`: `message:received`
 - `source`: `internal-hook`
-- `data` keys (when present): `from`, `to`, `content`, `channelId`, `accountId`, `conversationId`, `messageId`, `isGroup`, `groupId`, `metadata`
+- `data` keys (when present): `provider`, `surface`, `from`, `to`, `content`, `channelId`, `accountId`, `conversationId`, `threadId`, `messageId`, `senderId`, `senderName`, `isGroup`, `groupId`, `metadata`
 - `metadata.hookTimestamp` may exist
 
 ### `message.transcribed`
@@ -40,6 +41,7 @@ All event types share the same outer envelope:
 
 ### `message.sent`
 - `eventName`: `message:sent`
+- `data` includes the same generic route/message fields as `message.received` when available
 - `result`: `success` when available
 - `error`: present when `context.error` exists
 
@@ -53,14 +55,99 @@ All event types share the same outer envelope:
 
 ## Tool Events
 
+### Tool Provenance Object
+
+When present, `data.provenance` is an additive plugin-owned metadata block. It
+does not replace top-level `sessionId`, `sessionKey`, `runId`, or `toolCallId`;
+it explains how those fields were resolved and what extra routing evidence the
+plugin has observed.
+
+- identity resolution:
+  - `resolvedSessionId`, `resolvedSessionKey`, `resolvedSessionSource`
+  - raw candidates: `hookEventSessionId`, `hookEventSessionKey`, `hookEventContextSessionId`, `hookEventContextSessionKey`, `ctxSessionId`, `ctxSessionKey`
+- correlation:
+  - `runId`, `toolCallId`, `correlationId`
+- lineage:
+  - `parentAgentId`, `parentSessionId`, `parentSessionKey`, `subagentKey`
+- generic route/message provenance:
+  - `provider`, `surface`, `accountId`, `channelId`, `conversationId`, `threadId`, `messageId`, `from`, `to`, `senderId`, `senderName`
+- alias history:
+  - `sessionAliases.sessionIds`, `sessionAliases.sessionKeys`, `sessionAliases.routeKeys`
+- parsed generic session structure:
+  - `parsedSession`, `isThreadScoped`, `threadKind`, `threadToken`
+- route status:
+  - `routeResolution` = `resolved | ambiguous | unavailable`
+
+Example: resolved route provenance
+
+```json
+{
+  "resolvedSessionKey": "agent:jacob:main",
+  "resolvedSessionSource": "hookEvent.sessionKey",
+  "runId": "run-b",
+  "toolCallId": "call-42",
+  "routeResolution": "resolved",
+  "threadId": "1773179674.978729",
+  "conversationId": "conv-b",
+  "sessionAliases": {
+    "sessionKeys": [
+      "agent:jacob:main",
+      "agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773179674.978729"
+    ]
+  },
+  "parsedSession": {
+    "agentId": "jacob",
+    "provider": "slack_markdown",
+    "surface": "direct",
+    "threadKind": "thread",
+    "threadToken": "1773179674.978729",
+    "isThreadScoped": true
+  }
+}
+```
+
+Example: ambiguous shared runtime alias
+
+```json
+{
+  "resolvedSessionKey": "agent:jacob:main",
+  "resolvedSessionSource": "hookEvent.sessionKey",
+  "routeResolution": "ambiguous",
+  "sessionAliases": {
+    "sessionKeys": [
+      "agent:jacob:main",
+      "agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773179674.978729",
+      "agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889"
+    ],
+    "routeKeys": [
+      "conversationId=conv-a|threadId=1773251460.006889",
+      "conversationId=conv-b|threadId=1773179674.978729"
+    ]
+  }
+}
+```
+
+In the ambiguous case the plugin intentionally omits `threadId`,
+`conversationId`, and the other flattened route fields. Downstream consumers
+must treat that omission as unknown, not as an invitation to guess.
+
 ### `tool.called`
 - `eventName`: `before_tool_call`
 - `source`: `plugin-hook`
 - `data`: `toolName`, `params`, `agentId`, `parentAgentId`, `subagentKey`, `parentSessionId`, `parentSessionKey`
+- `data.provenance` may include:
+  - identity sources: `resolvedSessionId`, `resolvedSessionKey`, `resolvedSessionSource`, raw candidate fields from hook/context session refs
+  - correlation: `runId`, `toolCallId`, `correlationId`
+  - lineage: `parentAgentId`, `parentSessionId`, `parentSessionKey`, `subagentKey`
+  - generic route/message provenance: `provider`, `surface`, `accountId`, `channelId`, `conversationId`, `threadId`, `messageId`, `from`, `to`, `senderId`, `senderName`
+  - alias history: `sessionAliases.sessionIds`, `sessionAliases.sessionKeys`, `sessionAliases.routeKeys`
+  - parsed generic session structure: `parsedSession`, `isThreadScoped`, `threadKind`, `threadToken`
+  - resolution status: `routeResolution` (`resolved|ambiguous|unavailable`)
 
 ### `tool.guard.matched`
 - `eventName`: `before_tool_call`
 - `data`: `toolName`, `params` (possibly redacted), `blockReason?`, `matchedRuleId?`, `matchedActionId?`, `decisionSource?`, identity fields above
+- `data.provenance` uses the same optional structure as `tool.called`
 
 ### `tool.guard.allowed`
 - same structure as `tool.guard.matched`
@@ -74,15 +161,18 @@ All event types share the same outer envelope:
 - `eventName`: `after_tool_call`
 - `result`: tool result payload
 - `data`: `toolName`, `durationMs`, identity fields, `result`
+- `data.provenance` uses the same optional structure as `tool.called`
 
 ### `tool.error`
 - `eventName`: `after_tool_call`
 - `error.kind`: `tool`
 - `data`: `toolName`, `params`, identity fields, `error`, `stackTrace`
+- `data.provenance` uses the same optional structure as `tool.called`
 
 ### `tool.result_persist`
 - `eventName`: `tool_result_persist`
 - `data`: `toolName`, `toolCallId`, `message`, `isSynthetic`, identity fields
+- `data.provenance` uses the same optional structure as `tool.called`
 
 ## Command Events
 
@@ -239,6 +329,10 @@ All event types share the same outer envelope:
 ## Correlation Notes
 
 - Tool lifecycle correlation is maintained via `toolCallId` and `correlationId`.
+- Tool provenance enrichment is additive and conservative. When the plugin can link a runtime tool event to one logical session record, `data.provenance.routeResolution` is `resolved` and route fields may be present.
+- When a shared runtime alias such as `agent:<agentId>:main` maps to multiple active session records and no stronger identifier or `runId` breaks the tie, route/thread fields are intentionally omitted and `data.provenance.routeResolution` is `ambiguous`.
+- If the plugin never observes a thread-scoped alias or other route metadata for a runtime session, `data.provenance.routeResolution` is `unavailable`; downstream consumers should not infer thread ownership from `agentId` alone.
+- `resolvedSessionSource` reports which hook/context field won precedence. It is diagnostic metadata for consumers and fixtures, not a promise that every raw candidate field will always exist upstream.
 - Session and subagent synthetic events include parent/child linkage fields in `data`.
 - Hook Bridge rules can match the new agent/session lifecycle events through normal `eventType`, identity fields, and `data.*` matchers.
 - Tool Guard remains scoped to `before_tool_call`; prompt/model/compaction hooks are observable to Hook Bridge but not subject to synchronous tool-guard enforcement.

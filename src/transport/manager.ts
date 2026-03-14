@@ -2,10 +2,13 @@ import { type Server } from 'node:net';
 import { TransportConfig } from '../config';
 import { OpenClawEvent } from '../events/types';
 import { RuntimeLogger } from '../runtime/types';
-import { buildSemanticKey, cloneEventWithTransportMetadata, type TransportRole } from './protocol';
+import { cloneEventWithTransportMetadata, type TransportRole } from './protocol';
 import { logTransportInfo, logTransportWarn } from './log-context';
+import { shouldProcessTransportEvent } from './manager-dedupe';
+import { resolveOwnerAcquireFailure } from './manager-recovery';
 import {
   acquireTransportLock,
+  type TransportLockAcquireResult,
   cleanupTransportSocketPath,
   prepareTransportSocketPath,
   releaseTransportLock,
@@ -36,6 +39,8 @@ export class TransportManager {
   private flushing = false;
   private stopped = false;
   private ownsLock = false;
+  private nextOwnerRecoveryDelayMs?: number;
+  private lastLiveOwnerConflictKey?: string;
 
   constructor(params: {
     config: TransportConfig;
@@ -74,7 +79,7 @@ export class TransportManager {
       );
     }
     this.setRole('follower');
-    this.scheduleOwnerRecovery(this.config.reconnectBackoffMs);
+    this.scheduleOwnerRecovery(this.nextOwnerRecoveryDelayMs ?? this.config.reconnectBackoffMs);
   }
 
   getRole(): TransportRole {
@@ -231,11 +236,15 @@ export class TransportManager {
   }
 
   private tryBecomeOwner(): boolean {
-    if (!this.acquireLock()) {
+    const lockResult = this.acquireLock();
+    if (!lockResult.acquired) {
+      this.handleOwnerAcquireFailure(lockResult);
       this.setRole('follower');
       return false;
     }
 
+    this.nextOwnerRecoveryDelayMs = undefined;
+    this.lastLiveOwnerConflictKey = undefined;
     if (this.ownerRecoveryTimer) {
       clearTimeout(this.ownerRecoveryTimer);
       this.ownerRecoveryTimer = undefined;
@@ -256,18 +265,32 @@ export class TransportManager {
     return true;
   }
 
-  private acquireLock(): boolean {
-    const acquired = acquireTransportLock({
+  private acquireLock(): TransportLockAcquireResult {
+    const result = acquireTransportLock({
       config: this.config,
       logger: this.logger,
       runtimeId: this.runtimeId,
       role: this.role,
       pendingEvents: this.pendingEvents.length,
     });
-    if (acquired) {
+    if (result.acquired) {
       this.ownsLock = true;
     }
-    return acquired;
+    return result;
+  }
+
+  private handleOwnerAcquireFailure(result: Exclude<TransportLockAcquireResult, { acquired: true }>): void {
+    const failureState = resolveOwnerAcquireFailure({
+      config: this.config,
+      logger: this.logger,
+      pendingEvents: this.pendingEvents.length,
+      result,
+      role: this.role,
+      runtimeId: this.runtimeId,
+      previousConflictKey: this.lastLiveOwnerConflictKey,
+    });
+    this.lastLiveOwnerConflictKey = failureState.lastLiveOwnerConflictKey;
+    this.nextOwnerRecoveryDelayMs = failureState.nextOwnerRecoveryDelayMs;
   }
 
   private startOwnerServer(): void {
@@ -325,40 +348,14 @@ export class TransportManager {
   }
 
   private shouldProcess(event: OpenClawEvent): boolean {
-    const now = Date.now();
-    this.pruneDedupe(now);
-
-    if (this.seenEventIds.has(event.eventId)) {
-      this.logger.debug('[Transport] Dropping duplicate relayed eventId', event.eventId);
-      return false;
-    }
-    this.seenEventIds.set(event.eventId, now + this.config.dedupeTtlMs);
-
-    if (this.config.semanticDedupeEnabled) {
-      const semanticKey = buildSemanticKey(event);
-      if (semanticKey) {
-        if (this.seenSemanticKeys.has(semanticKey)) {
-          this.logger.debug('[Transport] Dropping duplicate semantic event', semanticKey);
-          return false;
-        }
-        this.seenSemanticKeys.set(semanticKey, now + this.config.dedupeTtlMs);
-      }
-    }
-
-    return true;
-  }
-
-  private pruneDedupe(now: number): void {
-    for (const [key, expiresAt] of this.seenEventIds) {
-      if (expiresAt <= now) {
-        this.seenEventIds.delete(key);
-      }
-    }
-    for (const [key, expiresAt] of this.seenSemanticKeys) {
-      if (expiresAt <= now) {
-        this.seenSemanticKeys.delete(key);
-      }
-    }
+    return shouldProcessTransportEvent({
+      config: this.config,
+      event,
+      logger: this.logger,
+      now: Date.now(),
+      seenEventIds: this.seenEventIds,
+      seenSemanticKeys: this.seenSemanticKeys,
+    });
   }
 
   private startHeartbeat(): void {

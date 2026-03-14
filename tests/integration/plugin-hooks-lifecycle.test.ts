@@ -130,6 +130,37 @@ describe('Plugin Hook Integration', () => {
     expect(end.eventName).toBe('session_end');
   });
 
+  it('resolves fallback session refs on session_end before tracker cleanup and emission', async () => {
+    await api.triggerTypedHook(
+      'session_start',
+      {
+        sessionId: 'session-fallback-1',
+        sessionKey: 'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+      },
+      {
+        agentId: 'jacob',
+        sessionId: 'session-fallback-1',
+        sessionKey: 'agent:jacob:slack_markdown:direct:d0af9c51rbr:thread:1773251460.006889',
+      },
+    );
+    await api.triggerTypedHook(
+      'session_end',
+      {
+        messageCount: 3,
+        context: {
+          sessionId: 'session-fallback-1',
+        },
+      },
+      {},
+    );
+    await waitForEvents(4);
+
+    const end = await latestEventByType('session.end');
+    expect(end.data.sessionId).toBe('session-fallback-1');
+    expect(end.agentId).toBe('jacob');
+    expect(end.data.messageCount).toBe(3);
+  });
+
   it('broadcasts agent run lifecycle hooks from plugin typed hooks', async () => {
     await api.triggerTypedHook(
       'before_model_resolve',

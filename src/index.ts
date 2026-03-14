@@ -287,29 +287,7 @@ export function createPlugin() {
     state.transportManager.start();
   }
 
-  function activate(api: OpenClawPluginApi): void {
-    if (state.isInitialized) {
-      throw new Error('Plugin is already activated. Deactivate the current instance before reactivating.');
-    }
-
-    logger.info('Activating OpenClaw Event Server Plugin v' + PLUGIN_VERSION);
-
-    const ops = createRuntimeEventOps(state, logger);
-    resetState(ops);
-    state.runtimeId = randomUUID();
-    initializeConfig(api);
-    state.hookBridge = createHookBridge(state.config, logger);
-
-    if (!state.config.enabled) {
-      state.websocketEnabled = false;
-      void stopBroadcastServer();
-      state.isInitialized = true;
-      logger.info('Plugin is disabled via configuration');
-      return;
-    }
-
-    initializeTransport(ops);
-
+  function registerHooks(api: OpenClawPluginApi, ops: ReturnType<typeof createRuntimeEventOps>): void {
     const handlers = createInternalHandlers({ state, ops });
 
     registerInternalHook(
@@ -398,6 +376,36 @@ export function createPlugin() {
     );
 
     registerTypedHooks(api, { state, logger, ops });
+  }
+
+  function activate(api: OpenClawPluginApi): void {
+    const ops = createRuntimeEventOps(state, logger);
+
+    if (state.isInitialized) {
+      logger.warn(
+        'Plugin already activated; reusing active runtime state and binding hooks to the new plugin registry',
+      );
+      registerHooks(api, ops);
+      return;
+    }
+
+    logger.info('Activating OpenClaw Event Server Plugin v' + PLUGIN_VERSION);
+
+    resetState(ops);
+    state.runtimeId = randomUUID();
+    initializeConfig(api);
+    state.hookBridge = createHookBridge(state.config, logger);
+
+    if (!state.config.enabled) {
+      state.websocketEnabled = false;
+      void stopBroadcastServer();
+      state.isInitialized = true;
+      logger.info('Plugin is disabled via configuration');
+      return;
+    }
+
+    initializeTransport(ops);
+    registerHooks(api, ops);
 
     if (!isStatusTickerDisabled()) {
       ops.startStatusTimer(state.config.status.tickIntervalMs, () => {

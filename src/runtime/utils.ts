@@ -1,5 +1,6 @@
 import { EventError, EventType, OpenClawEvent } from '../events/types';
 import { SessionTracker } from '../hooks/session-hooks';
+import { ResolvedSessionRefs, resolveSessionRefs as resolveSessionRefsWithCandidates } from './provenance';
 import {
   HookContext,
   HookRegistrationOptions,
@@ -192,20 +193,8 @@ export function registerTypedHookWithResult<TResult>(
 export function resolveSessionRefs(
   hookEvent?: Record<string, unknown>,
   ctx?: HookContext,
-): { sessionId?: string; sessionKey?: string } {
-  const eventContext = hookEvent && isRecord(hookEvent.context) ? hookEvent.context : {};
-  const sessionId =
-    readString(ctx?.sessionId) ??
-    readString(hookEvent?.sessionId) ??
-    readString(eventContext.sessionId) ??
-    readString(hookEvent?.sessionKey) ??
-    readString(ctx?.sessionKey);
-  const sessionKey =
-    readString(ctx?.sessionKey) ??
-    readString(hookEvent?.sessionKey) ??
-    readString(eventContext.sessionKey) ??
-    readString(hookEvent?.sessionId);
-  return { sessionId, sessionKey };
+): ResolvedSessionRefs {
+  return resolveSessionRefsWithCandidates(hookEvent, ctx);
 }
 
 export function resolveAgentId(params: {

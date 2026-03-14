@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   createToolCalledEvent,
   createToolCompletedEvent,
@@ -6,6 +7,8 @@ import {
   createToolResultPersistEvent,
 } from '../hooks/tool-hooks';
 import { redactPayload } from '../events/redaction';
+import { buildToolEventProvenance, observeSessionProvenance } from './provenance';
+import { buildBlockedParamsPatch, traceToolGuard } from './tool-hook-helpers';
 import type { OpenClawPluginApi, PendingToolCall } from './types';
 import type { TypedHookDeps } from './typed-hooks';
 import {
@@ -21,25 +24,6 @@ import {
   toContext,
   toToolHookEvent,
 } from './utils';
-
-const TOOL_GUARD_TRACE =
-  process.env.EVENT_PLUGIN_TOOL_GUARD_TRACE === '1' ||
-  process.env.EVENT_PLUGIN_TOOL_GUARD_TRACE === 'true';
-
-function traceToolGuard(logger: TypedHookDeps['logger'], ...args: unknown[]): void {
-  if (!TOOL_GUARD_TRACE) {
-    return;
-  }
-  logger.info('[ToolGuardTrace]', ...args);
-}
-
-function buildBlockedParamsPatch(params: Record<string, unknown>): Record<string, unknown> {
-  const patch: Record<string, unknown> = { __toolGuardBlocked: true };
-  for (const key of Object.keys(params)) {
-    patch[key] = null;
-  }
-  return patch;
-}
 
 export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): void {
   const { state, logger, ops } = deps;
@@ -70,6 +54,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
       const redactedGuardParams = redactPayload(params, state.config.hookBridge.toolGuard.redaction);
       const runId = readString(event.runId) ?? readString(ctx?.runId);
       const toolCallId = readString(event.toolCallId) ?? readString(ctx?.toolCallId);
+      const correlationId = randomUUID();
       const subagent = state.subagentTracker.getByChildSessionKey(sessionRefs.sessionKey);
       traceToolGuard(logger, 'before_tool_call.in', {
         toolName,
@@ -95,21 +80,37 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
         decision: guardDecision ?? null,
       });
 
-      if (
-        agentId !== undefined ||
-        sessionRefs.sessionId !== undefined ||
-        sessionRefs.sessionKey !== undefined
-      ) {
-        state.sessionTracker.touchSession({
-          sessionId: sessionRefs.sessionId,
-          sessionKey: sessionRefs.sessionKey,
-          agentId,
-        });
-      }
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        runId,
+        direction: 'internal',
+      });
+
+      const provenance = buildToolEventProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        runId,
+        toolCallId,
+        correlationId,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        subagentKey: subagent?.subagentKey,
+      });
 
       const calledEvent = createToolCalledEvent({
         toolName,
         params,
+        provenance,
         agentId,
         parentAgentId: subagent?.parentAgentId,
         subagentKey: subagent?.subagentKey,
@@ -119,6 +120,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
         parentSessionKey: subagent?.parentSessionKey,
         runId,
         toolCallId,
+        correlationId,
       });
       await ops.broadcastEvent(calledEvent);
 
@@ -128,11 +130,11 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
         sessionId: sessionRefs.sessionId,
         sessionKey: sessionRefs.sessionKey,
         agentId,
-        correlationId: calledEvent.correlationId,
+        correlationId,
       });
       const pending: PendingToolCall = {
         callId,
-        correlationId: calledEvent.correlationId,
+        correlationId,
         agentId,
       };
       if (toolCallId) {
@@ -160,6 +162,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             type: 'tool.guard.matched',
             toolName,
             params: redactedGuardParams,
+            provenance,
             blockReason: guardDecision.blockReason,
             matchedRuleId: guardDecision.matchedRuleId,
             matchedActionId: guardDecision.matchedActionId,
@@ -173,7 +176,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             parentSessionKey: subagent?.parentSessionKey,
             runId,
             toolCallId,
-            correlationId: calledEvent.correlationId,
+            correlationId,
           }),
         );
       }
@@ -199,6 +202,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
               },
               state.config.hookBridge.toolGuard.redaction,
             ),
+            provenance,
             blockReason: guardDecision.blockReason,
             matchedRuleId: guardDecision.matchedRuleId,
             matchedActionId: guardDecision.matchedActionId,
@@ -212,7 +216,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             parentSessionKey: subagent?.parentSessionKey,
             runId,
             toolCallId,
-            correlationId: calledEvent.correlationId,
+            correlationId,
           }),
         );
         return {
@@ -237,6 +241,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             type: 'tool.guard.allowed',
             toolName,
             params: redactPayload(guardDecision.params, state.config.hookBridge.toolGuard.redaction),
+            provenance,
             matchedRuleId: guardDecision.matchedRuleId,
             matchedActionId: guardDecision.matchedActionId,
             decisionSource: guardDecision.decisionSource,
@@ -249,7 +254,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             parentSessionKey: subagent?.parentSessionKey,
             runId,
             toolCallId,
-            correlationId: calledEvent.correlationId,
+            correlationId,
           }),
         );
         return {
@@ -263,6 +268,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             type: 'tool.guard.allowed',
             toolName,
             params: redactedGuardParams,
+            provenance,
             matchedRuleId: guardDecision.matchedRuleId,
             matchedActionId: guardDecision.matchedActionId,
             decisionSource: guardDecision.decisionSource,
@@ -275,7 +281,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             parentSessionKey: subagent?.parentSessionKey,
             runId,
             toolCallId,
-            correlationId: calledEvent.correlationId,
+            correlationId,
           }),
         );
       }
@@ -319,13 +325,42 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
           ctx,
           sessionRefs,
         });
-      const toolName =
-        callInfo?.toolName ?? readString(event.toolName) ?? readString(ctx?.toolName) ?? 'unknown';
       const runId = callInfo?.runId ?? readString(event.runId) ?? readString(ctx?.runId);
-      const correlationId = pending?.correlationId ?? callInfo?.correlationId;
       const subagent = state.subagentTracker.getByChildSessionKey(
         callInfo?.sessionKey ?? sessionRefs.sessionKey,
       );
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        runId,
+        direction: 'internal',
+      });
+      const toolName =
+        callInfo?.toolName ?? readString(event.toolName) ?? readString(ctx?.toolName) ?? 'unknown';
+      const correlationId = pending?.correlationId ?? callInfo?.correlationId;
+      const provenance = buildToolEventProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs: {
+          ...sessionRefs,
+          sessionId: callInfo?.sessionId ?? sessionRefs.sessionId,
+          sessionKey: callInfo?.sessionKey ?? sessionRefs.sessionKey,
+        },
+        hookEvent: raw,
+        ctx,
+        runId,
+        toolCallId: callInfo?.toolCallId ?? toolCallId,
+        correlationId,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        subagentKey: subagent?.subagentKey,
+      });
 
       const normalizedError =
         event.error !== undefined && event.error !== null ? normalizeError(event.error) : undefined;
@@ -335,6 +370,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             error: normalizedError.message,
             stackTrace: normalizedError.stack,
             params: callInfo?.params,
+            provenance,
             agentId,
             parentAgentId: subagent?.parentAgentId,
             subagentKey: subagent?.subagentKey,
@@ -350,6 +386,7 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
             toolName,
             result: event.result,
             durationMs: callInfo?.durationMs,
+            provenance,
             agentId,
             parentAgentId: subagent?.parentAgentId,
             subagentKey: subagent?.subagentKey,
@@ -395,12 +432,36 @@ export function registerToolHooks(api: OpenClawPluginApi, deps: TypedHookDeps): 
         sessionRefs,
       });
       const subagent = state.subagentTracker.getByChildSessionKey(sessionRefs.sessionKey);
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        direction: 'internal',
+      });
+      const provenance = buildToolEventProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        toolCallId: readString(event.toolCallId) ?? readString(ctx?.toolCallId),
+        correlationId: undefined,
+        parentAgentId: subagent?.parentAgentId,
+        parentSessionId: subagent?.parentSessionId,
+        parentSessionKey: subagent?.parentSessionKey,
+        subagentKey: subagent?.subagentKey,
+      });
 
       const persistEvent = createToolResultPersistEvent({
         toolName: readString(event.toolName) ?? readString(ctx?.toolName),
         toolCallId: readString(event.toolCallId) ?? readString(ctx?.toolCallId),
         message: event.message,
         isSynthetic: typeof event.isSynthetic === 'boolean' ? event.isSynthetic : undefined,
+        provenance,
         agentId,
         parentAgentId: subagent?.parentAgentId,
         subagentKey: subagent?.subagentKey,

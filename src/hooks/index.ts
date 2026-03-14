@@ -1,5 +1,6 @@
 export * from './message-hooks';
 export * from './tool-hooks';
+export * from './session-tracker';
 export * from './session-hooks';
 export * from './session-compaction-hooks';
 export * from './agent-hooks';

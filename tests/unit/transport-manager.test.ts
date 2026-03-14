@@ -4,43 +4,7 @@ import { join } from 'node:path';
 import { DEFAULT_CONFIG } from '../../src/config';
 import type { OpenClawEvent } from '../../src/events/types';
 import { TransportManager } from '../../src/transport/manager';
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (predicate()) {
-      return;
-    }
-    await wait(25);
-  }
-
-  throw new Error('timed out waiting for condition');
-}
-
-function createLogger() {
-  return {
-    debug: jest.fn<void, unknown[]>(),
-    info: jest.fn<void, unknown[]>(),
-    warn: jest.fn<void, unknown[]>(),
-    error: jest.fn<void, unknown[]>(),
-    queue: jest.fn<void, unknown[]>(),
-  };
-}
-
-function createEvent(eventId: string): OpenClawEvent {
-  return {
-    eventId,
-    schemaVersion: '1.0.0',
-    type: 'message.sent',
-    timestamp: new Date().toISOString(),
-    pluginVersion: '1.0.0',
-    data: {
-      content: 'transport test',
-    },
-  };
-}
+import { createEvent, createLogger, wait, waitFor } from './transport-manager-test-helpers';
 
 describe('TransportManager', () => {
   let tempDir: string;
@@ -197,64 +161,6 @@ describe('TransportManager', () => {
 
     await owner.stop();
   });
-
-  it('retries owner acquisition after a transient relay socket bind failure', async () => {
-    const socketPath = join(tempDir, 'transport.sock');
-    const lockPath = join(tempDir, 'transport.lock');
-    const ownerEvents: OpenClawEvent[] = [];
-
-    // Creating a directory at the socket path forces the first bind attempt to
-    // fail, which lets the test verify that owner recovery happens without a
-    // process restart.
-    await mkdir(socketPath);
-
-    const owner = new TransportManager({
-      config: {
-        ...DEFAULT_CONFIG.transport,
-        mode: 'owner',
-        socketPath,
-        lockPath,
-        lockStaleMs: 1000,
-        heartbeatMs: 250,
-        reconnectBackoffMs: 50,
-      },
-      logger: createLogger(),
-      runtimeId: 'owner-runtime',
-      onOwnerEvent: async (event) => {
-        ownerEvents.push(event);
-      },
-    });
-
-    const follower = new TransportManager({
-      config: {
-        ...DEFAULT_CONFIG.transport,
-        mode: 'follower',
-        socketPath,
-        lockPath,
-        relayTimeoutMs: 250,
-        reconnectBackoffMs: 50,
-      },
-      logger: createLogger(),
-      runtimeId: 'follower-runtime',
-      onOwnerEvent: async () => undefined,
-    });
-
-    owner.start();
-    follower.start();
-
-    await waitFor(() => owner.getRole() === 'follower');
-    await follower.dispatch(createEvent('queued-during-owner-recovery'));
-
-    await rm(socketPath, { recursive: true, force: true });
-
-    await waitFor(() => owner.getRole() === 'owner');
-    await waitFor(() => ownerEvents.length === 1);
-    expect(ownerEvents[0]?.eventId).toBe('queued-during-owner-recovery');
-
-    await follower.stop();
-    await owner.stop();
-  });
-
   it('reclaims a fresh transport lock immediately when the recorded owner pid is dead', async () => {
     const socketPath = join(tempDir, 'transport.sock');
     const lockPath = join(tempDir, 'transport.lock');

@@ -266,6 +266,63 @@ describe('Plugin Hook Integration', () => {
     await waitForEvents(1);
   });
 
+  it('preserves tool hook emission when activate() is called again in the same process', async () => {
+    const reloadedApi = new MockOpenClawApi();
+    reloadedApi.config = api.config;
+
+    plugin.activate(reloadedApi);
+
+    const reloadedHooks = reloadedApi.getHooks();
+    expect(reloadedHooks.find((hook) => hook.event === 'before_tool_call' && hook.kind === 'typed')).toBeDefined();
+    expect(reloadedHooks.find((hook) => hook.event === 'after_tool_call' && hook.kind === 'typed')).toBeDefined();
+    expect(reloadedHooks.find((hook) => hook.event === 'tool_result_persist' && hook.kind === 'typed')).toBeDefined();
+
+    await reloadedApi.triggerTypedHook(
+      'before_tool_call',
+      { toolName: 'exec', params: { command: 'echo ok' }, toolCallId: 'call-reactivate' },
+      {
+        agentId: 'sloan',
+        sessionId: 'reactivate-session-1',
+        sessionKey: 'agent:sloan:slack_markdown:direct:test:thread:reactivate',
+        runId: 'run-reactivate-1',
+      },
+    );
+    await reloadedApi.triggerTypedHook(
+      'after_tool_call',
+      { toolName: 'exec', result: { ok: true }, toolCallId: 'call-reactivate' },
+      {
+        agentId: 'sloan',
+        sessionId: 'reactivate-session-1',
+        sessionKey: 'agent:sloan:slack_markdown:direct:test:thread:reactivate',
+        runId: 'run-reactivate-1',
+      },
+    );
+    await reloadedApi.triggerTypedHook(
+      'tool_result_persist',
+      {
+        toolName: 'exec',
+        toolCallId: 'call-reactivate',
+        message: { type: 'toolResult', content: [{ type: 'text', text: 'ok' }] },
+        isSynthetic: false,
+      },
+      {
+        agentId: 'sloan',
+        sessionKey: 'agent:sloan:slack_markdown:direct:test:thread:reactivate',
+      },
+    );
+
+    await waitForEvents(7);
+
+    const calledEvent = await latestEventByType('tool.called');
+    const completedEvent = await latestEventByType('tool.completed');
+    const persistedEvent = await latestEventByType('tool.result_persist');
+
+    expect(calledEvent.toolCallId).toBe('call-reactivate');
+    expect(calledEvent.sessionKey).toBe('agent:sloan:slack_markdown:direct:test:thread:reactivate');
+    expect(completedEvent.toolCallId).toBe('call-reactivate');
+    expect(persistedEvent.toolCallId).toBe('call-reactivate');
+  });
+
   it('dispatches hook bridge webhook action for matching tool.called event', async () => {
     await plugin.deactivate();
 

@@ -146,6 +146,11 @@ describe('Tool Events', () => {
       const event = createToolCalledEvent({
         toolName: 'web_search',
         params: { query: 'test query', count: 5 },
+        provenance: {
+          resolvedSessionKey: 'agent:jacob:main',
+          routeResolution: 'resolved',
+          threadId: '1773251460.006889',
+        },
         agentId: 'agent-main',
       });
 
@@ -153,6 +158,11 @@ describe('Tool Events', () => {
       expect(event.agentId).toBe('agent-main');
       expect(event.data.toolName).toBe('web_search');
       expect(event.data.params).toEqual({ query: 'test query', count: 5 });
+      expect(event.data.provenance).toMatchObject({
+        resolvedSessionKey: 'agent:jacob:main',
+        routeResolution: 'resolved',
+        threadId: '1773251460.006889',
+      });
       expect(event.data.agentId).toBe('agent-main');
     });
   });

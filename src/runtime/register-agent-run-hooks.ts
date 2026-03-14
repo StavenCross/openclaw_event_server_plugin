@@ -17,6 +17,7 @@ import {
   resolveSessionRefs,
   toContext,
 } from './utils';
+import { observeSessionProvenance } from './provenance';
 
 export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDeps): void {
   const { state, logger, ops } = deps;
@@ -35,7 +36,15 @@ export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDep
       const prompt = readString(raw.prompt) ?? '';
       const runId = readString(ctx?.runId);
       const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, ctx, sessionRefs });
-      state.sessionTracker.touchSession({ sessionId: sessionRefs.sessionId, sessionKey: sessionRefs.sessionKey, agentId });
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        runId,
+        direction: 'internal',
+      });
       state.agentRunTracker.observeBeforeModelResolve({
         runId,
         sessionId: sessionRefs.sessionId,
@@ -71,7 +80,15 @@ export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDep
       const messages = Array.isArray(raw.messages) ? raw.messages : [];
       const runId = readString(ctx?.runId);
       const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, ctx, sessionRefs });
-      state.sessionTracker.touchSession({ sessionId: sessionRefs.sessionId, sessionKey: sessionRefs.sessionKey, agentId });
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        runId,
+        direction: 'internal',
+      });
       state.agentRunTracker.observeBeforePromptBuild({
         runId,
         sessionId: sessionRefs.sessionId,
@@ -117,8 +134,16 @@ export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDep
         ctx,
         sessionRefs: { sessionId, sessionKey: sessionRefs.sessionKey },
       });
-      state.sessionTracker.touchSession({ sessionId, sessionKey: sessionRefs.sessionKey, agentId });
       const runId = readString(raw.runId) ?? readString(ctx?.runId);
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs: { ...sessionRefs, sessionId },
+        hookEvent: raw,
+        ctx,
+        agentId,
+        runId,
+        direction: 'internal',
+      });
       const prompt = readString(raw.prompt) ?? '';
       const historyMessages = Array.isArray(raw.historyMessages) ? raw.historyMessages : [];
       const snapshot = state.agentRunTracker.getSnapshot({
@@ -187,8 +212,16 @@ export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDep
         ctx,
         sessionRefs: { sessionId, sessionKey: sessionRefs.sessionKey },
       });
-      state.sessionTracker.touchSession({ sessionId, sessionKey: sessionRefs.sessionKey, agentId });
       const runId = readString(raw.runId) ?? readString(ctx?.runId);
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs: { ...sessionRefs, sessionId },
+        hookEvent: raw,
+        ctx,
+        agentId,
+        runId,
+        direction: 'internal',
+      });
 
       await ops.broadcastEvent(
         createLlmOutputEvent({
@@ -230,7 +263,15 @@ export function registerAgentRunHooks(api: OpenClawPluginApi, deps: TypedHookDep
       const sessionRefs = resolveSessionRefs(raw, ctx);
       const runId = readString(ctx?.runId);
       const agentId = resolveAgentId({ sessionTracker: state.sessionTracker, hookEvent: raw, ctx, sessionRefs });
-      state.sessionTracker.touchSession({ sessionId: sessionRefs.sessionId, sessionKey: sessionRefs.sessionKey, agentId });
+      observeSessionProvenance({
+        sessionTracker: state.sessionTracker,
+        sessionRefs,
+        hookEvent: raw,
+        ctx,
+        agentId,
+        runId,
+        direction: 'internal',
+      });
 
       await ops.broadcastEvent(
         createAgentEndEvent({

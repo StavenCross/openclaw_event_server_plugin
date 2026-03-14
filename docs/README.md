@@ -4,8 +4,8 @@ This folder is the implementation-aligned documentation for `openclaw-event-serv
 
 ## Docs Map
 
-- [API](./api.md): event envelope, delivery channels, webhook behavior, queue behavior.
-- [Events](./events.md): exhaustive list of emitted event types and field structures.
+- [API](./api.md): event envelope, delivery channels, webhook behavior, queue behavior, and additive tool provenance metadata.
+- [Events](./events.md): exhaustive list of emitted event types, field structures, and provenance field semantics.
 - [Transport](./transport.md): single-owner transport mode, lock/relay flow, deduplication.
 - [Socket Layer](./socket-layer.md): WebSocket server behavior and local relay socket protocol.
 - [Security](./security.md): WS auth controls, origin/IP filters, HMAC signing, redaction.
